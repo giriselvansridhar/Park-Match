@@ -1,0 +1,7 @@
+{% with p=booking.phase %}
+<span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold
+  {% if p == 'active' %}bg-brand-500/15 text-brand-300{% elif p == 'upcoming' %}bg-sky-500/15 text-sky-300{% elif p == 'pending' %}bg-amber-500/15 text-amber-300{% elif p == 'completed' %}bg-slate-500/15 text-slate-300{% else %}bg-rose-500/10 text-rose-300{% endif %}">
+  <i class="fa-solid {% if p == 'active' %}fa-circle-dot{% elif p == 'upcoming' %}fa-calendar{% elif p == 'pending' %}fa-hourglass-half{% elif p == 'completed' %}fa-check{% else %}fa-ban{% endif %}"></i>
+  {% if p == 'active' %}Parked now{% elif p == 'upcoming' %}Confirmed{% elif p == 'completed' %}Completed{% else %}{{ booking.get_status_display }}{% endif %}
+</span>
+{% endwith %}

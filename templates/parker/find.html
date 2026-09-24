@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Find parking{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css">
+<style>
+  .leaflet-container { background: #0c121c; font-family: inherit; }
+  .price-pin { display: inline-block; transform: translate(-50%, -100%); white-space: nowrap; border-radius: 999px; background: #fff; color: #070b12; font-weight: 800; font-size: 12px; padding: 3px 9px; box-shadow: 0 4px 14px rgba(0,0,0,.45); transition: transform .15s, background .15s; }
+  .price-pin::after { content: ""; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%); border: 5px solid transparent; border-top-color: #fff; border-bottom: 0; }
+  .price-pin.hot { background: #34d3a6; transform: translate(-50%, -100%) scale(1.18); z-index: 1000; }
+  .price-pin.hot::after { border-top-color: #34d3a6; }
+  .me-dot { width: 16px; height: 16px; border-radius: 50%; background: #38bdf8; border: 3px solid #fff; box-shadow: 0 0 0 8px rgba(56,189,248,.25); }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #111926; color: #e2e8f0; border: 1px solid #223047; }
+  .leaflet-popup-content a { color: #6ee7c7; }
+  .leaflet-control-attribution { background: rgba(7,11,18,.7) !important; color: #64748b !important; }
+  .leaflet-control-attribution a { color: #94a3b8 !important; }
+  .leaflet-bar a { background: #111926 !important; color: #e2e8f0 !important; border-color: #223047 !important; }
+  .spot-card.hot { border-color: #34d3a6; }
+  .pm-cluster { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: rgba(20,184,138,.9); color: #070b12; font-weight: 800; font-size: 13px; box-shadow: 0 0 0 6px rgba(20,184,138,.25), 0 4px 14px rgba(0,0,0,.5); }
+  .filter-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+  .filter-toggle input:checked + span { border-color: #34d3a6; background: rgba(20,184,138,.14); color: #fff; }
+  .filter-toggle input:focus-visible + span { outline: 2px solid #34d3a6; outline-offset: 2px; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="flex flex-col lg:h-[calc(100vh-var(--pm-chrome,61px))] lg:flex-row">
+  <!-- List panel -->
+  <section class="order-2 flex w-full flex-col border-ink-800 lg:order-1 lg:w-[440px] lg:border-r">
+    <form id="filters" method="get" class="space-y-3 border-b border-ink-800 p-4">
+      <input type="hidden" name="lat" value="{{ center.lat }}">
+      <input type="hidden" name="lon" value="{{ center.lng }}">
+
+      {% if upcoming %}
+      <a href="{% url 'parker_bookings' %}" class="flex items-center gap-3 rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2.5 text-sm">
+        <i class="fa-solid fa-ticket text-brand-300"></i>
+        <span class="min-w-0 flex-1 truncate text-slate-200"><b class="text-white">{{ upcoming.spot.title }}</b> · {{ upcoming.start|date:"D j M, g:i A" }}</span>
+        <i class="fa-solid fa-chevron-right text-xs text-slate-500"></i>
+      </a>
+      {% endif %}
+
+      <div class="flex gap-2">
+        <button type="button" id="locate" class="btn-ghost flex-1"><i class="fa-solid fa-location-crosshairs text-brand-300"></i> {% if has_location %}Re-center on me{% else %}Use my location{% endif %}</button>
+        <select name="radius" class="pm-input !w-auto" aria-label="Search radius">
+          {% for r in radius_choices %}<option value="{{ r }}" {% if r == center.radius %}selected{% endif %}>{{ r }} km</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="grid grid-cols-3 gap-2">
+        <select name="vehicle" class="pm-input !px-3" aria-label="Vehicle">
+          <option value="car" {% if vehicle == 'car' %}selected{% endif %}>🚗 Car</option>
+          <option value="bike" {% if vehicle == 'bike' %}selected{% endif %}>🏍️ Bike</option>
+        </select>
+        <div class="relative">
+          <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">≤ ₹</span>
+          <input type="number" name="max_price" value="{{ max_price }}" min="0" step="10" placeholder="Any" class="pm-input pl-10" aria-label="Maximum price per hour">
+        </div>
+        <select name="sort" class="pm-input !px-3" aria-label="Sort by">
+          {% for key, label in sorts.items %}<option value="{{ key }}" {% if key == sort %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+        <label class="filter-toggle cursor-pointer">
+          <input type="checkbox" name="instant_book" value="1" {% if instant %}checked{% endif %}>
+          <span class="chip transition hover:border-ink-600"><i class="fa-solid fa-bolt text-amber-300"></i> Instant</span>
+        </label>
+        {% for field, label, icon, on in amenity_filters %}
+        <label class="filter-toggle cursor-pointer">
+          <input type="checkbox" name="{{ field }}" value="1" {% if on %}checked{% endif %}>
+          <span class="chip transition hover:border-ink-600"><i class="fa-solid {{ icon }}"></i> {{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+      <noscript><button class="btn-primary w-full">Apply filters</button></noscript>
+    </form>
+
+    <div class="flex items-center justify-between px-4 pt-3 text-sm">
+      <p class="text-slate-400">{% if total > spots|length %}Showing the <b class="text-white">{{ spots|length }}</b> {{ sort_label|lower }} of {{ total }} spots{% else %}<b class="text-white">{{ total }}</b> spot{{ total|pluralize }}{% endif %} within {{ center.radius }} km</p>
+    </div>
+
+    <div class="flex-1 space-y-3 overflow-y-auto p-4" id="spot-list">
+      {% for spot in spots %}
+      <a href="{% url 'spot_detail' spot.id %}" class="spot-card card group flex gap-4 p-3 transition hover:border-ink-600" data-id="{{ spot.id }}">
+        <div class="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-ink-800">
+          {% if spot.photo %}<img src="{{ spot.photo.url }}" alt="" loading="lazy" class="h-full w-full object-cover">
+          {% else %}<div class="grid h-full w-full place-items-center bg-gradient-to-br from-ink-700 to-ink-850 text-2xl text-slate-500"><i class="fa-solid {% if spot.is_covered %}fa-warehouse{% else %}fa-square-parking{% endif %}"></i></div>{% endif %}
+          {% if spot.instant_book %}<span class="absolute left-1.5 top-1.5 rounded-md bg-ink-950/80 px-1.5 py-0.5 text-[10px] font-bold text-amber-300"><i class="fa-solid fa-bolt"></i> Instant</span>{% endif %}
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-start justify-between gap-2">
+            <p class="truncate font-semibold text-white group-hover:text-brand-300">{{ spot.title }}</p>
+            <p class="shrink-0 text-right"><span class="font-bold text-white">₹{{ spot.hourly_rate|floatformat:0 }}</span><span class="text-xs text-slate-500">/hr</span></p>
+          </div>
+          <p class="truncate text-sm text-slate-400">{{ spot.address }}</p>
+          <div class="mt-2 flex items-center gap-3 text-sm">
+            <span class="text-slate-300"><i class="fa-solid fa-person-walking mr-1 text-slate-500"></i>{{ spot.distance|floatformat:1 }} km</span>
+            {% include "partials/stars.html" with avg=spot.avg_rating count=spot.review_count %}
+          </div>
+          <div class="mt-2 flex flex-wrap gap-1.5">
+            {% for label, icon in spot.amenities|slice:":3" %}<span class="chip !px-2 !py-0.5 !text-[11px]"><i class="fa-solid {{ icon }}"></i>{{ label }}</span>{% endfor %}
+          </div>
+        </div>
+      </a>
+      {% empty %}
+      <div class="card p-8 text-center">
+        <div class="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-ink-800 text-slate-400"><i class="fa-solid fa-magnifying-glass"></i></div>
+        <p class="font-semibold text-white">No spots match here</p>
+        <p class="mt-1 text-sm text-slate-400">Widen the radius, clear a filter, or drag the map and hit “Search this area”.</p>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- Map -->
+  <section class="relative order-1 h-[45vh] shrink-0 lg:order-2 lg:h-auto lg:flex-1">
+    <div id="map" class="absolute inset-0"></div>
+    <button id="search-here" type="button" class="btn-primary absolute left-1/2 top-4 z-[500] hidden -translate-x-1/2 shadow-xl"><i class="fa-solid fa-rotate"></i> Search this area</button>
+  </section>
+</div>
+{{ map_data|json_script:"spot-data" }}
+{{ center|json_script:"center-data" }}
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+<script>
+  const spots = JSON.parse(document.getElementById('spot-data').textContent);
+  const center = JSON.parse(document.getElementById('center-data').textContent);
+  const form = document.getElementById('filters');
+
+  const map = L.map('map', { zoomControl: true }).setView([center.lat, center.lng], 14);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: 'pm-tiles', referrerPolicy: 'strict-origin-when-cross-origin', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map);
+
+  const circle = L.circle([center.lat, center.lng], { radius: center.radius * 1000, color: '#34d3a6', weight: 1, fillOpacity: 0.04, dashArray: '4 6' }).addTo(map);
+  L.marker([center.lat, center.lng], { icon: L.divIcon({ className: '', html: '<div class="me-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }), interactive: false }).addTo(map);
+
+  const cluster = L.markerClusterGroup({
+    showCoverageOnHover: false, maxClusterRadius: 45, spiderfyOnMaxZoom: true,
+    iconCreateFunction: c => L.divIcon({ className: '', html: `<div class="pm-cluster">${c.getChildCount()}</div>`, iconSize: [40, 40], iconAnchor: [20, 20] }),
+  }).addTo(map);
+  const markers = {};
+  spots.forEach(s => {
+    const el = `<span class="price-pin" data-pin="${s.id}">₹${s.price}</span>`;
+    const m = L.marker([s.lat, s.lng], { icon: L.divIcon({ className: '', html: el, iconSize: [0, 0] }), title: s.title });
+    cluster.addLayer(m);
+    m.on('click', () => { window.location = s.url; });
+    m.on('mouseover', () => highlight(s.id, true));
+    m.on('mouseout', () => highlight(s.id, false));
+    markers[s.id] = m;
+  });
+  pmWatchMap(map, () => map.fitBounds(circle.getBounds(), { padding: [20, 20], animate: false }));
+
+  function highlight(id, on) {
+    document.querySelector(`[data-pin="${id}"]`)?.classList.toggle('hot', on);
+    const card = document.querySelector(`.spot-card[data-id="${id}"]`);
+    card?.classList.toggle('hot', on);
+    if (on && card && window.matchMedia('(min-width: 1024px)').matches) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  document.querySelectorAll('.spot-card').forEach(card => {
+    card.addEventListener('mouseenter', () => { document.querySelector(`[data-pin="${card.dataset.id}"]`)?.classList.add('hot'); });
+    card.addEventListener('focus', () => { const m = markers[card.dataset.id]; if (m) cluster.zoomToShowLayer(m); });
+    card.addEventListener('mouseleave', () => { document.querySelector(`[data-pin="${card.dataset.id}"]`)?.classList.remove('hot'); });
+  });
+
+  // Re-search when a filter changes.
+  form.querySelectorAll('select, input[type=checkbox]').forEach(el => el.addEventListener('change', () => form.submit()));
+  form.querySelector('[name=max_price]').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); form.submit(); } });
+  form.querySelector('[name=max_price]').addEventListener('change', () => form.submit());
+
+  function searchAt(lat, lng) {
+    form.lat.value = lat.toFixed(6);
+    form.lon.value = lng.toFixed(6);
+    form.submit();
+  }
+
+  const searchHere = document.getElementById('search-here');
+  // Only offer a re-search once the user has moved the map themselves.
+  let userMoved = false;
+  const container = map.getContainer();
+  ['mousedown', 'touchstart', 'wheel', 'keydown'].forEach(ev => container.addEventListener(ev, () => { userMoved = true; }, { passive: true }));
+  map.on('moveend', () => { if (userMoved) searchHere.classList.remove('hidden'); });
+  searchHere.addEventListener('click', () => { const c = map.getCenter(); searchAt(c.lat, c.lng); });
+
+  document.getElementById('locate').addEventListener('click', e => {
+    if (!navigator.geolocation) return alert('Location is not available in this browser.');
+    e.currentTarget.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Locating…';
+    navigator.geolocation.getCurrentPosition(
+      pos => searchAt(pos.coords.latitude, pos.coords.longitude),
+      () => { alert("Couldn't get your location. Drag the map instead and tap “Search this area”."); location.reload(); },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+</script>
+{% endblock %}

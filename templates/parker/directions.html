@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+{% block title %}Directions to {{ spot.title }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  .leaflet-container { background: #0c121c; font-family: inherit; }
+  .leaflet-control-attribution { background: rgba(7,11,18,.7) !important; color: #64748b !important; }
+  .leaflet-control-attribution a { color: #94a3b8 !important; }
+  .leaflet-bar a { background: #111926 !important; color: #e2e8f0 !important; border-color: #223047 !important; }
+  .dest-pin { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px 12px 12px 2px; transform: translate(-4px, -44px) rotate(-45deg); background: #14b88a; border: 3px solid #fff; box-shadow: 0 6px 16px rgba(0,0,0,.5); }
+  .dest-pin span { transform: rotate(45deg); font-weight: 900; color: #070b12; font-size: 18px; }
+  .me-dot { width: 18px; height: 18px; border-radius: 50%; background: #38bdf8; border: 3px solid #fff; box-shadow: 0 0 0 8px rgba(56,189,248,.25); }
+  .start-dot { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 4px solid #0f172a; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  .step.current { border-color: #34d3a6; background: rgba(20,184,138,.1); }
+  #start-chips .start-chip.active { border-color: #34d3a6; color: #fff; background: rgba(20,184,138,.14); }
+</style>
+{% endblock %}
+{% block content %}
+<div class="flex flex-col lg:h-[calc(100vh-var(--pm-chrome,61px))] lg:flex-row">
+  <!-- Panel -->
+  <section class="order-2 flex w-full flex-col border-ink-800 lg:order-1 lg:w-[420px] lg:border-r">
+    <div class="space-y-4 border-b border-ink-800 p-4">
+      <a href="{% url 'spot_detail' spot.id %}" class="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"><i class="fa-solid fa-arrow-left"></i> Back to spot</a>
+
+      <div class="flex items-center gap-3">
+        {% if spot.photo %}<img src="{{ spot.photo.url }}" alt="" class="h-14 w-20 shrink-0 rounded-lg object-cover object-[center_90%]">{% endif %}
+        <div class="min-w-0">
+          <p class="text-xs font-semibold uppercase tracking-wider text-brand-300">Directions to</p>
+          <h1 class="truncate text-lg font-bold text-white">{{ spot.title }}</h1>
+          <p class="truncate text-sm text-slate-400">{{ spot.address }}</p>
+        </div>
+      </div>
+      {% if booking %}
+      <p class="rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2 text-sm text-slate-200"><i class="fa-solid fa-ticket mr-1.5 text-brand-300"></i>Your pass <b class="font-mono">{{ booking.code }}</b> · arrive {{ booking.start|date:"D j M, g:i A" }}</p>
+      {% endif %}
+
+      <div>
+        <p class="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Start from</p>
+        <div class="flex flex-wrap gap-2" id="start-chips">
+          <button type="button" class="start-chip chip transition hover:border-ink-600" data-kind="me"><i class="fa-solid fa-location-crosshairs text-sky-300"></i> My location</button>
+          <button type="button" class="start-chip chip transition hover:border-ink-600" data-lat="13.0827" data-lng="80.2757" data-label="Chennai Central"><i class="fa-solid fa-train"></i> Chennai Central</button>
+          <button type="button" class="start-chip chip transition hover:border-ink-600" data-lat="12.9941" data-lng="80.1709" data-label="Chennai Airport"><i class="fa-solid fa-plane"></i> Airport</button>
+          <button type="button" class="start-chip chip transition hover:border-ink-600" data-lat="13.0418" data-lng="80.2337" data-label="T. Nagar"><i class="fa-solid fa-bag-shopping"></i> T. Nagar</button>
+        </div>
+        <p class="mt-2 text-xs text-slate-500" id="start-label">Or tap anywhere on the map to set a starting point.</p>
+      </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="border-b border-ink-800 p-4" id="summary">
+      <p class="text-sm text-slate-400" id="summary-status"><i class="fa-solid fa-spinner fa-spin mr-1.5"></i>Finding your location…</p>
+      <div class="hidden" id="summary-route">
+        <div class="flex items-end justify-between gap-3">
+          <div>
+            <p class="text-3xl font-extrabold text-white" id="sum-time">–</p>
+            <p class="text-sm text-slate-400"><span id="sum-dist">–</span> · arrive around <span id="sum-eta" class="text-slate-200">–</span></p>
+          </div>
+          <span class="chip"><i class="fa-solid fa-car-side"></i> Driving</span>
+        </div>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <button type="button" id="go" class="btn-primary flex-1"><i class="fa-solid fa-location-arrow"></i> Start</button>
+          <button type="button" id="overview" class="btn-ghost" title="Show the whole route"><i class="fa-solid fa-expand"></i><span class="sr-only">Show whole route</span></button>
+          <button type="button" id="reroute" class="btn-ghost hidden" title="Recalculate from where you are now"><i class="fa-solid fa-rotate"></i><span class="sr-only">Recalculate</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Steps -->
+    <ol class="flex-1 space-y-2 overflow-y-auto p-4 lg:min-h-0" id="steps" aria-label="Turn-by-turn directions"></ol>
+
+    <p class="border-t border-ink-800 px-4 py-3 text-xs text-slate-500">
+      Routes by <a href="https://project-osrm.org/" target="_blank" rel="noopener" class="text-slate-400 hover:underline">OSRM</a> on OpenStreetMap data. Times are estimates, so always follow road signs.
+      <a href="{{ spot.directions_url }}" target="_blank" rel="noopener" class="whitespace-nowrap text-slate-400 hover:underline">Open in Google Maps ↗</a>
+    </p>
+  </section>
+
+  <!-- Map -->
+  <section class="relative order-1 h-[55vh] shrink-0 lg:order-2 lg:h-auto lg:flex-1">
+    <div id="map" class="absolute inset-0"></div>
+    <div id="next-turn" class="pointer-events-none absolute inset-x-3 top-3 z-[500] hidden">
+      <div class="mx-auto flex max-w-lg items-center gap-4 rounded-2xl border border-brand-500/40 bg-ink-900/95 p-4 shadow-2xl backdrop-blur">
+        <span class="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand-500 text-2xl text-ink-950" id="nt-icon"></span>
+        <div class="min-w-0">
+          <p class="text-2xl font-extrabold text-white" id="nt-dist"></p>
+          <p class="truncate text-slate-300" id="nt-text"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+{{ dest|json_script:"dest-data" }}
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(() => {
+  const dest = JSON.parse(document.getElementById('dest-data').textContent);
+  const FALLBACK = { lat: 13.0827, lng: 80.2757, label: 'Chennai Central' };
+  const $ = id => document.getElementById(id);
+
+  // ---------- map
+  const map = L.map('map').setView([dest.lat, dest.lng], 15);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: 'pm-tiles', referrerPolicy: 'strict-origin-when-cross-origin', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map);
+  L.marker([dest.lat, dest.lng], { icon: L.divIcon({ className: '', html: '<div class="dest-pin"><span>P</span></div>', iconSize: [0, 0] }), title: dest.title, zIndexOffset: 1000 }).addTo(map);
+  let userMoved = false;
+  ['mousedown', 'touchstart', 'wheel'].forEach(ev => map.getContainer().addEventListener(ev, () => { userMoved = true; }, { passive: true }));
+  pmWatchMap(map);
+  new ResizeObserver(() => { if (routeBounds && !userMoved && watchId === null) map.fitBounds(routeBounds, { padding: [40, 40], animate: false }); }).observe(map.getContainer());
+
+  let start = null, startMarker = null, meMarker = null, casing = null, line = null;
+  let steps = [], routeBounds = null, current = -1, watchId = null, requestId = 0;
+
+  // ---------- helpers
+  const toRad = d => d * Math.PI / 180;
+  const meters = (a, b) => {
+    const R = 6371000, dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  };
+  const fmtDist = m => m < 1000 ? `${Math.max(10, Math.round(m / 10) * 10)} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)} km`;
+  const fmtTime = s => { const m = Math.max(1, Math.round(s / 60)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+  const ordinal = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][n % 100] || 'th');
+  const compass = b => ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][Math.round(b / 45) % 8];
+  const side = mod => (mod || '').includes('left') ? 'left' : (mod || '').includes('right') ? 'right' : 'straight';
+  const ROT = { 'straight': 0, 'slight right': 45, 'right': 90, 'sharp right': 135, 'uturn': 180, 'sharp left': -135, 'left': -90, 'slight left': -45 };
+
+  function instruction(s) {
+    const m = s.maneuver, mod = m.modifier || '', road = s.name || s.ref || '';
+    const onto = road ? ` onto ${road}` : '', on = road ? ` on ${road}` : '';
+    switch (m.type) {
+      case 'depart': return `Head ${compass(m.bearing_after || 0)}${on}`;
+      case 'arrive': return `Arrive at ${dest.title}` + (side(mod) !== 'straight' ? `, on your ${side(mod)}` : '');
+      case 'roundabout': case 'rotary': return m.exit ? `At the roundabout, take the ${ordinal(m.exit)} exit${onto}` : `Go through the roundabout${onto}`;
+      case 'roundabout turn': return `At the roundabout, turn ${side(mod)}${onto}`;
+      case 'exit roundabout': case 'exit rotary': return `Exit the roundabout${onto}`;
+      case 'merge': return `Merge ${side(mod) === 'straight' ? '' : side(mod) + ' '}${onto.trim() || 'into traffic'}`;
+      case 'on ramp': return `Take the ramp${side(mod) === 'straight' ? '' : ' on the ' + side(mod)}${onto}`;
+      case 'off ramp': return `Take the exit${side(mod) === 'straight' ? '' : ' on the ' + side(mod)}${onto}`;
+      case 'fork': return `Keep ${side(mod)} at the fork${onto}`;
+      case 'end of road': return `At the end of the road, turn ${side(mod)}${onto}`;
+    }
+    if (mod === 'uturn') return `Make a U-turn${onto}`;
+    if (mod === 'straight' || !mod) return road ? `Continue onto ${road}` : 'Continue straight';
+    if (mod.startsWith('slight')) return `Bear ${side(mod)}${onto}`;
+    if (mod.startsWith('sharp')) return `Turn sharp ${side(mod)}${onto}`;
+    return `Turn ${mod}${onto}`;
+  }
+
+  function iconHtml(s) {
+    const t = s.maneuver.type;
+    if (t === 'depart') return '<i class="fa-solid fa-location-arrow"></i>';
+    if (t === 'arrive') return '<i class="fa-solid fa-flag-checkered"></i>';
+    if (t.includes('roundabout') || t.includes('rotary')) return '<i class="fa-solid fa-rotate-right"></i>';
+    const deg = ROT[s.maneuver.modifier] ?? 0;
+    return `<i class="fa-solid fa-arrow-up" style="transform: rotate(${deg}deg)"></i>`;
+  }
+
+  // ---------- start point
+  const chips = [...document.querySelectorAll('.start-chip')];
+  function markChip(el) { chips.forEach(c => c.classList.toggle('active', c === el)); }
+
+  function setStart(lat, lng, label, chip) {
+    start = { lat, lng };
+    markChip(chip || null);
+    $('start-label').textContent = `Starting from ${label}. Tap the map to change it.`;
+    if (!startMarker) startMarker = L.marker([lat, lng], { icon: L.divIcon({ className: '', html: '<div class="start-dot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }) }).addTo(map);
+    else startMarker.setLatLng([lat, lng]);
+    route();
+  }
+
+  function useMyLocation(chip, { quiet = false } = {}) {
+    if (!navigator.geolocation) { if (!quiet) alert('Location is not available in this browser.'); return useFallback('Location is not available here'); }
+    status('<i class="fa-solid fa-spinner fa-spin mr-1.5"></i>Finding your location…');
+    navigator.geolocation.getCurrentPosition(pos => {
+      const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      if (meters(here, dest) > 80000) return useFallback("You're more than 80 km from this spot");
+      setStart(here.lat, here.lng, 'your location', chip);
+    }, () => useFallback(quiet ? 'Location access is off' : "Couldn't get your location"), { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+  }
+
+  function useFallback(reason) {
+    const chip = chips.find(c => c.dataset.label === FALLBACK.label);
+    setStart(FALLBACK.lat, FALLBACK.lng, FALLBACK.label, chip);
+    $('start-label').textContent = `${reason}, so this is a sample route from ${FALLBACK.label}. Pick another start or tap the map.`;
+  }
+
+  chips.forEach(c => c.addEventListener('click', () => {
+    stopLive();
+    if (c.dataset.kind === 'me') useMyLocation(c);
+    else setStart(+c.dataset.lat, +c.dataset.lng, c.dataset.label, c);
+  }));
+  map.on('click', e => { stopLive(); setStart(e.latlng.lat, e.latlng.lng, 'the dropped pin'); });
+
+  // ---------- routing
+  function status(html) {
+    $('summary-status').innerHTML = html;
+    $('summary-status').classList.remove('hidden');
+    $('summary-route').classList.add('hidden');
+  }
+
+  async function route() {
+    const id = ++requestId;
+    status('<i class="fa-solid fa-spinner fa-spin mr-1.5"></i>Working out the best route…');
+    $('steps').innerHTML = '';
+    const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&steps=true`;
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      if (id !== requestId) return;  // a newer request has started
+      if (data.code !== 'Ok' || !data.routes.length) throw new Error(data.message || 'No route found');
+      draw(data.routes[0]);
+    } catch (err) {
+      if (id !== requestId) return;
+      status(`<span class="text-rose-300"><i class="fa-solid fa-circle-exclamation mr-1.5"></i>Couldn't find a route from there.</span> Try another starting point, or <a class="text-brand-300 hover:underline" target="_blank" rel="noopener" href="{{ spot.directions_url }}">open Google Maps</a>.`);
+    }
+  }
+
+  function draw(r) {
+    const coords = r.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+    if (casing) { casing.remove(); line.remove(); }
+    casing = L.polyline(coords, { color: '#052e25', weight: 10, opacity: .9, lineJoin: 'round', lineCap: 'round' }).addTo(map);
+    line = L.polyline(coords, { color: '#34d3a6', weight: 6, opacity: 1, lineJoin: 'round', lineCap: 'round' }).addTo(map);
+    routeBounds = line.getBounds();
+    userMoved = false;
+    map.invalidateSize();
+    map.fitBounds(routeBounds, { padding: [40, 40], animate: false });
+
+    steps = r.legs[0].steps.filter((s, i, all) => s.distance > 0 || s.maneuver.type === 'arrive' || i === 0);
+    $('steps').innerHTML = steps.map((s, i) => `
+      <li>
+        <button type="button" class="step card flex w-full items-start gap-3 p-3 text-left transition hover:border-ink-600" data-i="${i}">
+          <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-ink-800 text-brand-300">${iconHtml(s)}</span>
+          <span class="min-w-0 flex-1">
+            <span class="block text-sm font-medium text-slate-100">${escapeHtml(instruction(s))}</span>
+            ${s.maneuver.type !== 'arrive' ? `<span class="block text-xs text-slate-500">${fmtDist(s.distance)}</span>` : ''}
+          </span>
+        </button>
+      </li>`).join('');
+    document.querySelectorAll('#steps .step').forEach(b => b.addEventListener('click', () => {
+      const s = steps[+b.dataset.i];
+      map.flyTo([s.maneuver.location[1], s.maneuver.location[0]], 17, { duration: .6 });
+      highlight(+b.dataset.i, false);
+    }));
+
+    $('sum-time').textContent = fmtTime(r.duration);
+    $('sum-dist').textContent = fmtDist(r.distance);
+    $('sum-eta').textContent = new Date(Date.now() + r.duration * 1000).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+    $('summary-status').classList.add('hidden');
+    $('summary-route').classList.remove('hidden');
+    current = -1;
+  }
+
+  function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+  function highlight(i, scroll = true) {
+    current = i;
+    document.querySelectorAll('#steps .step').forEach(b => b.classList.toggle('current', +b.dataset.i === i));
+    if (scroll) document.querySelector(`#steps .step[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  // ---------- live follow mode
+  function stopLive() {
+    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    $('go').innerHTML = '<i class="fa-solid fa-location-arrow"></i> Start';
+    $('next-turn').classList.add('hidden');
+    $('reroute').classList.add('hidden');
+  }
+
+  function onPosition(pos) {
+    const here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    if (!meMarker) meMarker = L.marker([here.lat, here.lng], { icon: L.divIcon({ className: '', html: '<div class="me-dot"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }), zIndexOffset: 2000 }).addTo(map);
+    else meMarker.setLatLng([here.lat, here.lng]);
+    map.panTo([here.lat, here.lng], { animate: true });
+
+    if (meters(here, dest) < 40) {
+      showNext('<i class="fa-solid fa-flag-checkered"></i>', "You've arrived", dest.title);
+      highlight(steps.length - 1);
+      return;
+    }
+    // The next manoeuvre is the closest one ahead; once we're within 25 m of it, move on to the following one.
+    let best = 0, bestD = Infinity;
+    steps.forEach((s, i) => {
+      const d = meters(here, { lat: s.maneuver.location[1], lng: s.maneuver.location[0] });
+      if (i > 0 && d < bestD) { bestD = d; best = i; }
+    });
+    if (bestD < 25 && best < steps.length - 1) { best += 1; bestD = meters(here, { lat: steps[best].maneuver.location[1], lng: steps[best].maneuver.location[0] }); }
+    highlight(best);
+    showNext(iconHtml(steps[best]), fmtDist(bestD), instruction(steps[best]));
+  }
+
+  function showNext(icon, dist, text) {
+    $('nt-icon').innerHTML = icon;
+    $('nt-dist').textContent = dist;
+    $('nt-text').textContent = text;
+    $('next-turn').classList.remove('hidden');
+  }
+
+  $('go').addEventListener('click', () => {
+    if (watchId !== null) return stopLive();
+    if (!navigator.geolocation) return alert('Live directions need location access.');
+    watchId = navigator.geolocation.watchPosition(onPosition, () => { stopLive(); alert("Couldn't follow your location. Check location permissions."); }, { enableHighAccuracy: true, maximumAge: 5000 });
+    $('go').innerHTML = '<i class="fa-solid fa-stop"></i> Stop';
+    $('reroute').classList.remove('hidden');
+    map.setZoom(17);
+  });
+  $('overview').addEventListener('click', () => routeBounds && map.fitBounds(routeBounds, { padding: [40, 40] }));
+  $('reroute').addEventListener('click', () => {
+    if (!meMarker) return;
+    const p = meMarker.getLatLng();
+    start = { lat: p.lat, lng: p.lng };
+    startMarker && startMarker.setLatLng(p);
+    route();
+  });
+
+  // ---------- go: try the visitor's location, fall back to a sample start in Chennai
+  useMyLocation(chips[0], { quiet: true });
+})();
+</script>
+{% endblock %}

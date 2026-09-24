@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{% if is_new %}List a spot{% else %}Edit spot{% endif %}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  .leaflet-container { background: #0c121c; cursor: crosshair; }
+  .leaflet-control-attribution { background: rgba(7,11,18,.7) !important; color: #64748b !important; }
+  .leaflet-control-attribution a { color: #94a3b8 !important; }
+  .toggle input { position: absolute; opacity: 0; pointer-events: none; }
+  .toggle input:checked + span { border-color: #34d3a6; background: rgba(20,184,138,.12); color: #fff; }
+  .toggle input:checked + span .tick { background: #34d3a6; border-color: #34d3a6; color: #070b12; }
+  .toggle input:focus-visible + span { outline: 2px solid #34d3a6; outline-offset: 2px; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+  <a href="{% url 'landlord_dashboard' %}" class="mb-4 inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"><i class="fa-solid fa-arrow-left"></i> Dashboard</a>
+  <h1 class="text-3xl font-extrabold tracking-tight text-white">{% if is_new %}List your parking spot{% else %}Edit “{{ spot.title }}”{% endif %}</h1>
+  <p class="mt-1 text-slate-400">{% if is_new %}Parkers nearby will see it on the map as soon as you publish.{% else %}Changes go live immediately.{% endif %}</p>
+
+  <form method="post" enctype="multipart/form-data" class="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-2" novalidate>
+    {% csrf_token %}
+    {{ form.latitude }}{{ form.longitude }}
+
+    <div class="space-y-6">
+      {% include "partials/form_errors.html" %}
+      <section class="card space-y-4 p-6">
+        <h2 class="font-semibold text-white">1 · The basics</h2>
+        {% include "partials/field.html" with field=form.title %}
+        {% include "partials/field.html" with field=form.description %}
+        <div>
+          <label for="{{ form.photo.id_for_label }}" class="pm-label">Photo</label>
+          <div class="flex items-center gap-4">
+            {% if spot.photo %}<img src="{{ spot.photo.url }}" alt="Current photo" class="h-16 w-24 shrink-0 rounded-lg object-cover object-[center_90%]">{% endif %}
+            <div class="min-w-0 flex-1">
+              {{ form.photo }}
+              <p class="mt-1 text-xs text-slate-500">{% if spot.photo %}Upload a real photo to replace the illustration.{% else %}Optional. Without one, the listing gets an illustration.{% endif %}</p>
+            </div>
+          </div>
+          {% for error in form.photo.errors %}<p class="mt-1 text-xs text-rose-300"><i class="fa-solid fa-circle-exclamation mr-1"></i>{{ error }}</p>{% endfor %}
+        </div>
+      </section>
+
+      <section class="card space-y-4 p-6">
+        <h2 class="font-semibold text-white">2 · Price & space</h2>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {% include "partials/field.html" with field=form.hourly_rate %}
+          {% include "partials/field.html" with field=form.capacity %}
+        </div>
+        <div>
+          <span class="pm-label">Vehicles you accept</span>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="toggle cursor-pointer">{{ form.accepts_car }}<span class="flex items-center gap-2 rounded-xl border border-ink-700 px-4 py-3 text-sm font-semibold text-slate-400 transition"><i class="fa-solid fa-car"></i> Cars</span></label>
+            <label class="toggle cursor-pointer">{{ form.accepts_bike }}<span class="flex items-center gap-2 rounded-xl border border-ink-700 px-4 py-3 text-sm font-semibold text-slate-400 transition"><i class="fa-solid fa-motorcycle"></i> Bikes</span></label>
+          </div>
+        </div>
+        <div>
+          <span class="pm-label">Amenities</span>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="toggle cursor-pointer">{{ form.is_covered }}<span class="flex items-center gap-2 rounded-xl border border-ink-700 px-4 py-3 text-sm font-semibold text-slate-400 transition"><i class="fa-solid fa-umbrella"></i> Covered</span></label>
+            <label class="toggle cursor-pointer">{{ form.has_cctv }}<span class="flex items-center gap-2 rounded-xl border border-ink-700 px-4 py-3 text-sm font-semibold text-slate-400 transition"><i class="fa-solid fa-video"></i> CCTV</span></label>
+            <label class="toggle cursor-pointer">{{ form.has_ev_charging }}<span class="flex items-center gap-2 rounded-xl border border-ink-700 px-4 py-3 text-sm font-semibold text-slate-400 transition"><i class="fa-solid fa-charging-station"></i> EV charging</span></label>
+            <label class="toggle cursor-pointer">{{ form.has_guard }}<span class="flex items-center gap-2 rounded-xl border border-ink-700 px-4 py-3 text-sm font-semibold text-slate-400 transition"><i class="fa-solid fa-user-shield"></i> Guarded</span></label>
+          </div>
+        </div>
+        <label class="toggle block cursor-pointer">{{ form.instant_book }}
+          <span class="flex items-center gap-4 rounded-xl border border-ink-700 px-4 py-3 transition">
+            <span class="tick grid h-6 w-6 shrink-0 place-items-center rounded-md border border-ink-600 text-xs text-transparent"><i class="fa-solid fa-check"></i></span>
+            <span><span class="block font-semibold text-white"><i class="fa-solid fa-bolt mr-1 text-amber-300"></i> Instant book</span><span class="block text-sm text-slate-400">Bookings are confirmed automatically. Spots with this on get more bookings.</span></span>
+          </span>
+        </label>
+      </section>
+    </div>
+
+    <div class="space-y-6">
+      <section class="card space-y-4 p-6 lg:sticky lg:top-24">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold text-white">3 · Location</h2>
+          <button type="button" id="locate" class="text-sm font-semibold text-brand-300 hover:underline"><i class="fa-solid fa-location-crosshairs mr-1"></i>Use my location</button>
+        </div>
+        <p class="text-sm text-slate-400">Tap the map to drop a pin exactly where parkers should go. Drag it to fine-tune.</p>
+        <div id="picker" class="h-72 overflow-hidden rounded-xl border border-ink-700"></div>
+        <p id="pin-status" class="text-xs text-slate-500"></p>
+        {% for error in form.latitude.errors %}<p class="text-xs text-rose-300"><i class="fa-solid fa-circle-exclamation mr-1"></i>{{ error }}</p>{% endfor %}
+        {% include "partials/field.html" with field=form.address %}
+        {% include "partials/field.html" with field=form.city %}
+        <button class="btn-primary w-full py-3 text-base">{% if is_new %}<i class="fa-solid fa-rocket"></i> Publish spot{% else %}<i class="fa-solid fa-floppy-disk"></i> Save changes{% endif %}</button>
+      </section>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  const latIn = document.getElementById('{{ form.latitude.id_for_label }}');
+  const lngIn = document.getElementById('{{ form.longitude.id_for_label }}');
+  const status = document.getElementById('pin-status');
+  const start = latIn.value && lngIn.value ? [parseFloat(latIn.value), parseFloat(lngIn.value)] : null;
+
+  const map = L.map('picker').setView(start || [13.0827, 80.2707], start ? 17 : 12);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: 'pm-tiles', referrerPolicy: 'strict-origin-when-cross-origin', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map);
+
+  let marker = null;
+  function place(lat, lng) {
+    latIn.value = lat.toFixed(6);
+    lngIn.value = lng.toFixed(6);
+    if (!marker) {
+      marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+      marker.on('dragend', () => { const p = marker.getLatLng(); place(p.lat, p.lng); });
+    } else {
+      marker.setLatLng([lat, lng]);
+    }
+    status.innerHTML = `<i class="fa-solid fa-circle-check mr-1 text-brand-300"></i>Pinned at ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  }
+  if (start) place(...start); else status.textContent = 'No pin yet.';
+  map.on('click', e => place(e.latlng.lat, e.latlng.lng));
+  pmWatchMap(map, () => map.setView(start || [13.0827, 80.2707], start ? 17 : 12, { animate: false }));
+
+  document.getElementById('locate').addEventListener('click', () => {
+    if (!navigator.geolocation) return alert('Location is not available in this browser.');
+    navigator.geolocation.getCurrentPosition(
+      p => { place(p.coords.latitude, p.coords.longitude); map.setView([p.coords.latitude, p.coords.longitude], 18); },
+      () => alert("Couldn't get your location — tap the map instead."),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+</script>
+{% endblock %}

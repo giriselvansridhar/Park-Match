@@ -1,0 +1,11 @@
+# Local-only data: the deploy uses deploy/demo.sqlite3 and deploy/media instead.
+db.sqlite3
+media/
+**/__pycache__/
+*.pyc
+.claude/
+.venv/
+venv/
+
+# README screenshots and videos aren't needed by the app.
+docs/

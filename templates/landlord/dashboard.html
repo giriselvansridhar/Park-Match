@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Host dashboard{% endblock %}
+{% block head %}
+<style>
+  .viz-root { --surface-1: #0f1622; --series-1: #199e70; --series-1-hover: #22b884; --grid: #1c2738; }
+  .bar { background: var(--series-1); border-radius: 4px 4px 0 0; transition: background .15s; }
+  .col:hover .bar, .col:focus-visible .bar { background: var(--series-1-hover); }
+</style>
+{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+  <div class="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <div>
+      <p class="text-sm text-slate-400">{% now "l, j F" %}</p>
+      <h1 class="text-3xl font-extrabold tracking-tight text-white">Hi {{ pm_user.name.split.0 }} 👋</h1>
+    </div>
+    <a href="{% url 'spot_create' %}" class="btn-primary"><i class="fa-solid fa-plus"></i> List a new spot</a>
+  </div>
+
+  {% if not spots %}
+  <!-- Onboarding -->
+  <div class="card relative overflow-hidden p-10 text-center">
+    <div class="pointer-events-none absolute inset-0 opacity-30" style="background: radial-gradient(circle at 50% 0%, rgba(20,184,138,.35), transparent 60%);"></div>
+    <div class="relative">
+      <div class="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-brand-500 text-3xl font-black text-ink-950">P</div>
+      <h2 class="text-2xl font-bold text-white">Let's get your first spot on the map</h2>
+      <p class="mx-auto mt-2 max-w-md text-slate-400">Drop a pin, set a price per hour and choose how many vehicles fit. Parkers nearby will see it right away.</p>
+      <a href="{% url 'spot_create' %}" class="btn-primary mt-6 px-6 py-3 text-base"><i class="fa-solid fa-location-dot"></i> List my space</a>
+    </div>
+  </div>
+  {% else %}
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+    <div class="card col-span-2 p-5 lg:col-span-1">
+      <p class="text-sm text-slate-400">Earned this month</p>
+      <p class="mt-2 text-5xl font-extrabold tracking-tight text-white">₹{{ stats.month_revenue|floatformat:0|intcomma }}</p>
+      <p class="mt-2 text-xs text-slate-500">₹{{ stats.total_revenue|floatformat:0|intcomma }} all time</p>
+    </div>
+    <div class="card p-5">
+      <p class="text-sm text-slate-400">Requests waiting</p>
+      <p class="mt-2 text-3xl font-bold text-white">{{ requests|length }}</p>
+      <p class="mt-2 text-xs {% if requests %}text-amber-300{% else %}text-slate-500{% endif %}">{% if requests %}<i class="fa-solid fa-circle-exclamation mr-1"></i>Needs your reply{% else %}All caught up{% endif %}</p>
+    </div>
+    <div class="card p-5">
+      <p class="text-sm text-slate-400">Parked right now</p>
+      <p class="mt-2 text-3xl font-bold text-white">{{ stats.active_now }}</p>
+      <p class="mt-2 text-xs text-slate-500">{{ upcoming|length }} upcoming booking{{ upcoming|length|pluralize }}</p>
+    </div>
+    <div class="card p-5">
+      <p class="text-sm text-slate-400">Guest rating</p>
+      <p class="mt-2 text-3xl font-bold text-white">{% if stats.rating.a %}{{ stats.rating.a|floatformat:1 }} <i class="fa-solid fa-star text-xl text-amber-300"></i>{% else %}—{% endif %}</p>
+      <p class="mt-2 text-xs text-slate-500">{{ stats.rating.c }} review{{ stats.rating.c|pluralize }}</p>
+    </div>
+  </div>
+
+  <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_400px]">
+    <div class="space-y-6 min-w-0">
+      <!-- Requests -->
+      {% if requests %}
+      <div class="card border-amber-400/30 p-5">
+        <h2 class="mb-4 flex items-center gap-2 font-semibold text-white"><i class="fa-solid fa-bell text-amber-300"></i> Booking requests</h2>
+        <div class="divide-y divide-ink-800">
+          {% for b in requests %}
+          <div class="flex flex-wrap items-center gap-4 py-3">
+            <span class="grid h-10 w-10 place-items-center rounded-full bg-ink-800 font-bold text-white">{{ b.parker.name|first|upper }}</span>
+            <div class="min-w-0 flex-1">
+              <p class="font-semibold text-white">{{ b.parker.name }} <span class="font-mono text-xs font-normal text-slate-500">{{ b.vehicle_number }}</span></p>
+              <p class="text-sm text-slate-400">{{ b.spot.title }} · {{ b.start|date:"D j M, g:i A" }} · {{ b.hours }} hr{{ b.hours|pluralize }}</p>
+            </div>
+            <p class="font-bold text-white">₹{{ b.total_price|floatformat:0 }}</p>
+            <div class="flex gap-2">
+              <form method="post" action="{% url 'booking_respond' b.id 'decline' %}">{% csrf_token %}<button class="btn-ghost !px-3 !py-2" title="Decline"><i class="fa-solid fa-xmark"></i><span class="sr-only">Decline</span></button></form>
+              <form method="post" action="{% url 'booking_respond' b.id 'accept' %}">{% csrf_token %}<button class="btn-primary !py-2"><i class="fa-solid fa-check"></i> Accept</button></form>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Earnings chart -->
+      <div class="card viz-root p-5">
+        <div class="mb-4 flex items-baseline justify-between">
+          <h2 class="font-semibold text-white">Booked revenue, last 14 days</h2>
+          <p class="text-sm text-slate-400">₹{{ chart_total|floatformat:0|intcomma }} total</p>
+        </div>
+        <div class="relative">
+          <div class="absolute inset-x-0 top-0 border-t border-dashed" style="border-color: var(--grid)"></div>
+          <div class="absolute right-0 top-0 -translate-y-full pb-0.5 text-[11px] text-slate-500" id="chart-peak"></div>
+          <div class="flex h-40 items-end gap-0.5 border-b border-ink-700" id="chart">
+            {% for d in chart %}
+            <div class="col group relative flex h-full flex-1 cursor-default items-end justify-center outline-none" tabindex="0" data-label="{{ d.date|date:'D j M' }}" data-value="{{ d.value|floatformat:0 }}">
+              {% if d.value %}<div class="bar w-full max-w-[24px]" style="height: {{ d.pct|stringformat:'f' }}%"></div>{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          <div class="mt-1.5 flex gap-0.5 text-center text-[11px] text-slate-500">
+            {% for d in chart %}<div class="flex-1">{% if forloop.counter0|divisibleby:2 or forloop.last %}{{ d.date|date:"j" }}{% endif %}</div>{% endfor %}
+          </div>
+          <div id="chart-tip" class="pointer-events-none absolute z-10 hidden -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-ink-700 bg-ink-850 px-2.5 py-1.5 text-xs shadow-xl">
+            <p class="text-slate-400" data-l></p><p class="font-semibold text-white" data-v></p>
+          </div>
+        </div>
+        {% if not chart_total %}<p class="mt-3 text-sm text-slate-500">No confirmed bookings in the last two weeks yet. Turning on instant book usually helps.</p>{% endif %}
+        <details class="mt-3 text-sm">
+          <summary class="cursor-pointer text-slate-500 hover:text-slate-300">View as table</summary>
+          <table class="mt-2 w-full text-left">
+            <thead class="text-slate-500"><tr><th class="py-1 font-medium">Day</th><th class="py-1 text-right font-medium">Revenue</th></tr></thead>
+            <tbody class="text-slate-300">{% for d in chart %}<tr class="border-t border-ink-800"><td class="py-1">{{ d.date|date:"D j M" }}</td><td class="py-1 text-right">₹{{ d.value|floatformat:0|intcomma }}</td></tr>{% endfor %}</tbody>
+          </table>
+        </details>
+      </div>
+
+      <!-- Spots -->
+      <div>
+        <h2 class="mb-3 font-semibold text-white">Your spots <span class="text-slate-500">· {{ spots|length }}</span></h2>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {% for s in spots %}
+          <div class="card flex flex-col overflow-hidden p-4 {% if not s.is_active %}opacity-60{% endif %}">
+            {% if s.photo %}<img src="{{ s.photo.url }}" alt="" loading="lazy" class="-mx-4 -mt-4 mb-4 h-32 w-[calc(100%+2rem)] max-w-none object-cover object-[center_92%]">{% endif %}
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="truncate font-semibold text-white">{{ s.title }}</p>
+                <p class="truncate text-sm text-slate-400">{{ s.address }}</p>
+              </div>
+              <span class="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold {% if s.is_active %}bg-brand-500/15 text-brand-300{% else %}bg-slate-500/15 text-slate-400{% endif %}">{% if s.is_active %}● Live{% else %}Paused{% endif %}</span>
+            </div>
+            <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-300">
+              <span><b class="text-white">₹{{ s.hourly_rate|floatformat:0 }}</b>/hr</span>
+              <span>{{ s.capacity }} slot{{ s.capacity|pluralize }}</span>
+              <span>{{ s.upcoming_count }} upcoming</span>
+              {% include "partials/stars.html" with avg=s.avg_rating count=s.review_count %}
+              {% if s.instant_book %}<span class="text-amber-300"><i class="fa-solid fa-bolt"></i> Instant</span>{% endif %}
+            </div>
+            <div class="mt-4 flex gap-2 border-t border-ink-800 pt-3">
+              <a href="{% url 'spot_edit' s.id %}" class="btn-ghost flex-1 !py-1.5 text-xs"><i class="fa-solid fa-pen"></i> Edit</a>
+              <form method="post" action="{% url 'spot_toggle' s.id %}" class="flex-1">{% csrf_token %}
+                <button class="btn-ghost w-full !py-1.5 text-xs">{% if s.is_active %}<i class="fa-solid fa-pause"></i> Pause{% else %}<i class="fa-solid fa-play"></i> Go live{% endif %}</button>
+              </form>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Upcoming -->
+    <aside class="card h-fit p-5">
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="font-semibold text-white">Upcoming guests</h2>
+        <a href="{% url 'landlord_bookings' %}" class="text-sm font-semibold text-brand-300 hover:underline">All bookings</a>
+      </div>
+      <div class="space-y-3">
+        {% for b in upcoming %}
+        <div class="flex gap-3 rounded-xl bg-ink-850 p-3">
+          <div class="w-12 shrink-0 rounded-lg bg-ink-800 py-1.5 text-center">
+            <p class="text-[10px] font-semibold uppercase text-slate-400">{{ b.start|date:"M" }}</p>
+            <p class="text-lg font-bold leading-none text-white">{{ b.start|date:"j" }}</p>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-2"><p class="truncate font-semibold text-white">{{ b.parker.name }}</p>{% include "partials/status_badge.html" with booking=b %}</div>
+            <p class="truncate text-xs text-slate-400">{{ b.start|date:"g:i A" }}–{{ b.end|date:"g:i A" }} · {{ b.spot.title }}</p>
+            <p class="mt-1 text-xs"><span class="font-mono text-slate-300">{{ b.vehicle_number }}</span> · <a href="tel:{{ b.parker.phone }}" class="text-brand-300 hover:underline">{{ b.parker.phone }}</a></p>
+          </div>
+        </div>
+        {% empty %}
+        <p class="py-6 text-center text-sm text-slate-500">No upcoming bookings yet.</p>
+        {% endfor %}
+      </div>
+    </aside>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  (() => {
+    const chart = document.getElementById('chart');
+    if (!chart) return;
+    const tip = document.getElementById('chart-tip');
+    const cols = [...chart.querySelectorAll('.col')];
+    const peak = Math.max(...cols.map(c => +c.dataset.value));
+    if (peak) document.getElementById('chart-peak').textContent = '₹' + peak.toLocaleString('en-IN');
+    const show = col => {
+      tip.querySelector('[data-l]').textContent = col.dataset.label;
+      tip.querySelector('[data-v]').textContent = '₹' + (+col.dataset.value).toLocaleString('en-IN');
+      const bar = col.querySelector('.bar');
+      const top = bar ? bar.offsetTop : chart.offsetHeight;
+      tip.style.left = (col.offsetLeft + col.offsetWidth / 2) + 'px';
+      tip.style.top = (chart.offsetTop + top - 6) + 'px';
+      tip.classList.remove('hidden');
+    };
+    cols.forEach(col => {
+      col.addEventListener('mouseenter', () => show(col));
+      col.addEventListener('focus', () => show(col));
+      col.addEventListener('mouseleave', () => tip.classList.add('hidden'));
+      col.addEventListener('blur', () => tip.classList.add('hidden'));
+    });
+  })();
+</script>
+{% endblock %}

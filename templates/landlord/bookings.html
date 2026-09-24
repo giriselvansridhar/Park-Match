@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Bookings{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+  <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-extrabold tracking-tight text-white">Bookings</h1>
+      <p class="mt-1 text-slate-400">Every booking across your spots.</p>
+    </div>
+    <div class="flex flex-wrap gap-1 rounded-xl bg-ink-900 p-1 text-sm">
+      <a href="?" class="rounded-lg px-3 py-1.5 font-medium {% if not status %}bg-ink-700 text-white{% else %}text-slate-400 hover:text-white{% endif %}">All</a>
+      {% for value, label in statuses %}
+      <a href="?status={{ value }}" class="rounded-lg px-3 py-1.5 font-medium {% if status == value %}bg-ink-700 text-white{% else %}text-slate-400 hover:text-white{% endif %}">{{ label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card overflow-x-auto">
+    <table class="w-full min-w-[760px] text-left text-sm">
+      <thead class="border-b border-ink-800 text-slate-500">
+        <tr><th class="px-4 py-3 font-medium">Pass</th><th class="px-4 py-3 font-medium">Parker</th><th class="px-4 py-3 font-medium">Spot</th><th class="px-4 py-3 font-medium">When</th><th class="px-4 py-3 text-right font-medium">Amount</th><th class="px-4 py-3 font-medium">Status</th><th class="px-4 py-3"><span class="sr-only">Actions</span></th></tr>
+      </thead>
+      <tbody class="divide-y divide-ink-800">
+        {% for b in bookings %}
+        <tr class="hover:bg-ink-850/60">
+          <td class="px-4 py-3 font-mono text-slate-400">{{ b.code }}</td>
+          <td class="px-4 py-3"><p class="font-semibold text-white">{{ b.parker.name }}</p><p class="font-mono text-xs text-slate-500">{{ b.vehicle_number }}</p></td>
+          <td class="px-4 py-3 text-slate-300">{{ b.spot.title|truncatechars:32 }}</td>
+          <td class="px-4 py-3 text-slate-300">{{ b.start|date:"j M, g:i A" }}<p class="text-xs text-slate-500">{{ b.hours }} hr{{ b.hours|pluralize }}</p></td>
+          <td class="px-4 py-3 text-right font-semibold text-white">₹{{ b.total_price|floatformat:0 }}</td>
+          <td class="px-4 py-3">{% include "partials/status_badge.html" with booking=b %}{% if b.review %}<p class="mt-1 text-xs text-amber-300">{% for i in "12345" %}{% if forloop.counter <= b.review.rating %}★{% endif %}{% endfor %}</p>{% endif %}</td>
+          <td class="px-4 py-3 text-right">
+            {% if b.status == 'pending' and b.can_cancel %}
+            <div class="flex justify-end gap-2">
+              <form method="post" action="{% url 'booking_respond' b.id 'decline' %}">{% csrf_token %}<button class="btn-ghost !px-3 !py-1.5 text-xs">Decline</button></form>
+              <form method="post" action="{% url 'booking_respond' b.id 'accept' %}">{% csrf_token %}<button class="btn-primary !px-3 !py-1.5 text-xs">Accept</button></form>
+            </div>
+            {% elif b.phase == 'upcoming' or b.phase == 'active' %}
+            <a href="tel:{{ b.parker.phone }}" class="text-brand-300 hover:underline"><i class="fa-solid fa-phone mr-1"></i>Call</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="px-4 py-12 text-center text-slate-500">No bookings here yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

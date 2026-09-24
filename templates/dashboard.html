@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+  <div class="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <div>
+      <p class="text-sm text-slate-400">Staff only</p>
+      <h1 class="text-3xl font-extrabold tracking-tight text-white">ParkMatch overview</h1>
+    </div>
+    <a href="{% url 'admin:index' %}" class="btn-ghost"><i class="fa-solid fa-user-shield"></i> Django admin</a>
+  </div>
+
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+    <div class="card p-5"><p class="text-sm text-slate-400">Parkers</p><p class="mt-2 text-3xl font-bold text-white">{{ parkers|length }}</p></div>
+    <div class="card p-5"><p class="text-sm text-slate-400">Hosts</p><p class="mt-2 text-3xl font-bold text-white">{{ landlords|length }}</p></div>
+    <div class="card p-5"><p class="text-sm text-slate-400">Spots</p><p class="mt-2 text-3xl font-bold text-white">{{ spot_count }}</p></div>
+    <div class="card p-5"><p class="text-sm text-slate-400">Bookings</p><p class="mt-2 text-3xl font-bold text-white">{{ booking_count }}</p></div>
+    <div class="card p-5"><p class="text-sm text-slate-400">Confirmed value</p><p class="mt-2 text-3xl font-bold text-white">₹{{ revenue|floatformat:0|intcomma }}</p></div>
+  </div>
+
+  <h2 class="mb-3 mt-10 font-semibold text-white">Latest bookings</h2>
+  <div class="card overflow-x-auto">
+    <table class="w-full min-w-[640px] text-left text-sm">
+      <thead class="border-b border-ink-800 text-slate-500"><tr><th class="px-4 py-3 font-medium">Pass</th><th class="px-4 py-3 font-medium">Parker</th><th class="px-4 py-3 font-medium">Spot</th><th class="px-4 py-3 font-medium">Start</th><th class="px-4 py-3 text-right font-medium">Amount</th><th class="px-4 py-3 font-medium">Status</th></tr></thead>
+      <tbody class="divide-y divide-ink-800">
+        {% for b in bookings %}
+        <tr><td class="px-4 py-3 font-mono text-slate-400">{{ b.code }}</td><td class="px-4 py-3 text-white">{{ b.parker.name }}</td><td class="px-4 py-3 text-slate-300">{{ b.spot.title|truncatechars:36 }}</td><td class="px-4 py-3 text-slate-300">{{ b.start|date:"j M, g:i A" }}</td><td class="px-4 py-3 text-right text-white">₹{{ b.total_price|floatformat:0 }}</td><td class="px-4 py-3">{% include "partials/status_badge.html" with booking=b %}</td></tr>
+        {% empty %}<tr><td colspan="6" class="px-4 py-8 text-center text-slate-500">No bookings yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2">
+    <div>
+      <h2 class="mb-3 font-semibold text-white">Parkers</h2>
+      <div class="card max-h-[480px] overflow-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="sticky top-0 border-b border-ink-800 bg-ink-900 text-slate-500"><tr><th class="px-4 py-3 font-medium">Name</th><th class="px-4 py-3 font-medium">Phone</th><th class="px-4 py-3 font-medium">Vehicle</th><th class="px-4 py-3 font-medium">Joined</th></tr></thead>
+          <tbody class="divide-y divide-ink-800">{% for p in parkers %}<tr><td class="px-4 py-2.5 text-white">{{ p.name }}<p class="text-xs text-slate-500">{{ p.email }}</p></td><td class="px-4 py-2.5 text-slate-300">{{ p.phone }}</td><td class="px-4 py-2.5 text-slate-300">{{ p.get_vehicle_type_display }} · <span class="font-mono">{{ p.vehicle_number }}</span></td><td class="px-4 py-2.5 text-slate-400">{{ p.registered_at|date:"j M Y" }}</td></tr>{% empty %}<tr><td colspan="4" class="px-4 py-8 text-center text-slate-500">No parkers yet.</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h2 class="mb-3 font-semibold text-white">Hosts</h2>
+      <div class="card max-h-[480px] overflow-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="sticky top-0 border-b border-ink-800 bg-ink-900 text-slate-500"><tr><th class="px-4 py-3 font-medium">Name</th><th class="px-4 py-3 font-medium">Phone</th><th class="px-4 py-3 font-medium">City</th><th class="px-4 py-3 text-right font-medium">Spots</th></tr></thead>
+          <tbody class="divide-y divide-ink-800">{% for l in landlords %}<tr><td class="px-4 py-2.5 text-white">{{ l.name }}<p class="text-xs text-slate-500">{{ l.email }}</p></td><td class="px-4 py-2.5 text-slate-300">{{ l.phone }}</td><td class="px-4 py-2.5 text-slate-300">{{ l.city }}</td><td class="px-4 py-2.5 text-right text-white">{{ l.spot_count }}</td></tr>{% empty %}<tr><td colspan="4" class="px-4 py-8 text-center text-slate-500">No hosts yet.</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

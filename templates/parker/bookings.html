@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}My bookings{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+  <div class="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-extrabold tracking-tight text-white">My bookings</h1>
+      <p class="mt-1 text-slate-400">Your passes, requests and parking history.</p>
+    </div>
+    <a href="{% url 'Parker_main' %}" class="btn-primary"><i class="fa-solid fa-plus"></i> New booking</a>
+  </div>
+
+  {% if not groups.now and not groups.pending and not groups.past %}
+  <div class="card p-12 text-center">
+    <div class="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-brand-500/15 text-xl text-brand-300"><i class="fa-solid fa-ticket"></i></div>
+    <p class="text-lg font-semibold text-white">No bookings yet</p>
+    <p class="mt-1 text-slate-400">Find a spot near you and your pass will show up here.</p>
+    <a href="{% url 'Parker_main' %}" class="btn-primary mt-6">Find parking</a>
+  </div>
+  {% endif %}
+
+  {% if groups.now %}
+  <h2 class="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">Your passes</h2>
+  <div class="mb-10 space-y-4">
+    {% for b in groups.now %}
+    <div class="relative overflow-hidden rounded-2xl border {% if b.phase == 'active' %}border-brand-500/50{% else %}border-ink-700{% endif %} bg-gradient-to-br from-ink-850 to-ink-900">
+      {% if b.spot.photo %}<div class="relative h-28 overflow-hidden"><img src="{{ b.spot.photo.url }}" alt="" class="h-full w-full object-cover object-[center_92%]"><div class="absolute inset-0 bg-gradient-to-t from-ink-900 to-transparent"></div></div>{% endif %}
+      <div class="grid sm:grid-cols-[1fr_auto]">
+        <div class="p-6">
+          <div class="flex items-center gap-3">{% include "partials/status_badge.html" with booking=b %}<span class="font-mono text-sm text-slate-500">{{ b.code }}</span></div>
+          <h3 class="mt-3 text-xl font-bold text-white">{{ b.spot.title }}</h3>
+          <p class="text-sm text-slate-400">{{ b.spot.address }}</p>
+          <div class="mt-5 grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+            <div><p class="text-slate-500">Arrive</p><p class="font-semibold text-white">{{ b.start|date:"D j M" }}<br>{{ b.start|date:"g:i A" }}</p></div>
+            <div><p class="text-slate-500">Leave by</p><p class="font-semibold text-white">{{ b.end|date:"D j M" }}<br>{{ b.end|date:"g:i A" }}</p></div>
+            <div><p class="text-slate-500">Vehicle</p><p class="font-mono font-semibold text-white">{{ b.vehicle_number }}</p></div>
+          </div>
+          <div class="mt-6 flex flex-wrap gap-2">
+            <a href="{% url 'spot_directions' b.spot.id %}" class="btn-primary !py-2"><i class="fa-solid fa-diamond-turn-right"></i> Directions</a>
+            <a href="tel:{{ b.spot.landlord.phone }}" class="btn-ghost !py-2"><i class="fa-solid fa-phone"></i> Call host</a>
+            {% if b.can_cancel %}
+            <form method="post" action="{% url 'cancel_booking' b.id %}" onsubmit="return confirm('Cancel booking {{ b.code }}?')">{% csrf_token %}<button class="btn-danger !py-2">Cancel</button></form>
+            {% endif %}
+          </div>
+        </div>
+        <!-- ticket stub -->
+        <div class="relative flex flex-row items-center justify-between gap-4 border-t border-dashed border-ink-700 p-6 sm:flex-col sm:justify-center sm:border-l sm:border-t-0">
+          <span class="absolute -left-3 -top-3 hidden h-6 w-6 rounded-full bg-ink-950 sm:block"></span>
+          <span class="absolute -bottom-3 -left-3 hidden h-6 w-6 rounded-full bg-ink-950 sm:block"></span>
+          <div class="grid h-20 w-20 place-items-center rounded-2xl {% if b.phase == 'active' %}bg-brand-500{% else %}bg-sky-400{% endif %} text-5xl font-black text-ink-950" aria-hidden="true">P</div>
+          <div class="text-right sm:text-center"><p class="text-2xl font-extrabold text-white">₹{{ b.total_price|floatformat:0 }}</p><p class="text-xs text-slate-500">{{ b.hours }} hr{{ b.hours|pluralize }}</p></div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if groups.pending %}
+  <h2 class="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">Waiting for host</h2>
+  <div class="mb-10 space-y-3">
+    {% for b in groups.pending %}
+    <div class="card flex flex-wrap items-center gap-4 p-4">
+      {% if b.spot.photo %}<img src="{{ b.spot.photo.url }}" alt="" loading="lazy" class="h-11 w-16 rounded-lg object-cover">{% else %}<div class="grid h-11 w-11 place-items-center rounded-xl bg-amber-400/10 text-amber-300"><i class="fa-solid fa-hourglass-half"></i></div>{% endif %}
+      <div class="min-w-0 flex-1">
+        <p class="truncate font-semibold text-white">{{ b.spot.title }}</p>
+        <p class="text-sm text-slate-400">{{ b.start|date:"D j M, g:i A" }} · {{ b.hours }} hr{{ b.hours|pluralize }} · ₹{{ b.total_price|floatformat:0 }}</p>
+      </div>
+      {% if b.can_cancel %}
+      <form method="post" action="{% url 'cancel_booking' b.id %}">{% csrf_token %}<button class="btn-ghost !py-2 text-sm">Withdraw</button></form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if groups.past %}
+  <h2 class="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">History</h2>
+  <div class="space-y-3">
+    {% for b in groups.past %}
+    <div class="card p-4">
+      <div class="flex flex-wrap items-center gap-4">
+        {% if b.spot.photo %}<img src="{{ b.spot.photo.url }}" alt="" loading="lazy" class="h-11 w-16 rounded-lg object-cover">{% endif %}
+        <div class="min-w-0 flex-1">
+          <a href="{% url 'spot_detail' b.spot.id %}" class="truncate font-semibold text-white hover:text-brand-300">{{ b.spot.title }}</a>
+          <p class="text-sm text-slate-400">{{ b.start|date:"j M Y, g:i A" }} · {{ b.hours }} hr{{ b.hours|pluralize }} · ₹{{ b.total_price|floatformat:0 }}</p>
+        </div>
+        {% include "partials/status_badge.html" with booking=b %}
+      </div>
+      {% if b.can_review %}
+      <form method="post" action="{% url 'review_booking' b.id %}" class="review-form mt-4 space-y-3 border-t border-ink-800 pt-4">
+        {% csrf_token %}
+        <input type="hidden" name="rating" value="">
+        <div class="flex items-center gap-3">
+          <span class="text-sm text-slate-400">Rate your stay</span>
+          <div class="stars flex gap-1 text-xl text-ink-600" role="radiogroup" aria-label="Rating">
+            {% for i in "12345" %}<button type="button" data-v="{{ forloop.counter }}" class="transition hover:scale-110" aria-label="{{ forloop.counter }} star{{ forloop.counter|pluralize }}"><i class="fa-solid fa-star"></i></button>{% endfor %}
+          </div>
+        </div>
+        <div class="extra hidden space-y-3">
+          <textarea name="comment" rows="2" class="pm-input" placeholder="Anything future parkers should know? (optional)"></textarea>
+          <button class="btn-primary !py-2">Post review</button>
+        </div>
+      </form>
+      {% elif b.review %}
+      <p class="mt-3 border-t border-ink-800 pt-3 text-sm text-slate-400">
+        You rated it <span class="text-amber-300">{% for i in "12345" %}{% if forloop.counter <= b.review.rating %}★{% endif %}{% endfor %}</span>{% if b.review.comment %} — “{{ b.review.comment|truncatechars:90 }}”{% endif %}
+      </p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.querySelectorAll('.review-form').forEach(form => {
+    const btns = [...form.querySelectorAll('.stars button')];
+    const paint = v => btns.forEach(b => b.classList.toggle('text-amber-300', +b.dataset.v <= v));
+    btns.forEach(b => {
+      b.addEventListener('mouseenter', () => paint(+b.dataset.v));
+      b.addEventListener('click', () => { form.rating.value = b.dataset.v; form.querySelector('.extra').classList.remove('hidden'); });
+    });
+    form.querySelector('.stars').addEventListener('mouseleave', () => paint(+form.rating.value || 0));
+  });
+</script>
+{% endblock %}

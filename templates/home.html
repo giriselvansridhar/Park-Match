@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Parking marketplace for Chennai{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  .leaflet-container { background: #0c121c; font-family: inherit; }
+  .leaflet-control-attribution { background: rgba(7,11,18,.7) !important; color: #64748b !important; font-size: 10px; }
+  .leaflet-control-attribution a { color: #94a3b8 !important; }
+  .hero-pin { display: inline-block; transform: translate(-50%, -100%); white-space: nowrap; border-radius: 999px; background: #fff; color: #070b12; font-weight: 800; font-size: 11px; padding: 2px 7px; box-shadow: 0 3px 10px rgba(0,0,0,.5); cursor: pointer; }
+  .hero-pin:hover { background: #34d3a6; }
+</style>
+{% endblock %}
+{% block content %}
+<!-- Hero -->
+<section class="relative overflow-hidden">
+  <div class="pointer-events-none absolute inset-0 opacity-40" style="background-image: radial-gradient(circle at 15% 20%, rgba(20,184,138,.25), transparent 40%), radial-gradient(circle at 85% 0%, rgba(56,189,248,.18), transparent 35%);"></div>
+  <div class="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-4 pb-16 pt-12 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:pt-20">
+    <div>
+      <div class="mb-6 flex flex-wrap gap-2">
+        <span class="chip border-brand-500/30 bg-brand-500/10 text-brand-300"><span class="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-400"></span> Live demo</span>
+        <span class="chip">No sign-up needed</span>
+        <span class="chip">Django · Python</span>
+      </div>
+      <h1 class="text-4xl font-extrabold leading-[1.05] tracking-tight text-white sm:text-6xl">
+        Private parking in Chennai,<br><span class="bg-gradient-to-r from-brand-300 to-sky-300 bg-clip-text text-transparent">booked in seconds.</span>
+      </h1>
+      <p class="mt-6 max-w-xl text-lg text-slate-400">
+        <b class="text-slate-200">ParkMatch</b> is a two-sided marketplace. Drivers find and book nearby driveways, garages and lots on a live map, and hosts list their empty spaces, approve bookings and track what they earn.
+      </p>
+
+      <div class="mt-8 flex flex-wrap gap-3" id="demo">
+        <a href="{% url 'Parker_main' %}" class="btn-primary px-6 py-3 text-base"><i class="fa-solid fa-map-location-dot"></i> Explore the map</a>
+        {% if pm_demo_mode %}
+        <form method="post" action="{% url 'demo_login' 'parker' %}">{% csrf_token %}<button class="btn-ghost px-5 py-3 text-base"><i class="fa-solid fa-car-side text-sky-300"></i> Try as a driver</button></form>
+        <form method="post" action="{% url 'demo_login' 'landlord' %}">{% csrf_token %}<button class="btn-ghost px-5 py-3 text-base"><i class="fa-solid fa-house-chimney text-amber-300"></i> Try as a host</button></form>
+        {% endif %}
+      </div>
+      <p class="mt-4 text-sm text-slate-500">
+        {% if pm_demo_mode %}The demo buttons log you straight into sample accounts, with no forms and no PIN.{% else %}<a href="{% url 'Parker_Register' %}" class="font-semibold text-brand-300 hover:underline">Create an account</a> or <a href="{% url 'login' %}" class="font-semibold text-brand-300 hover:underline">log in</a>.{% endif %}
+      </p>
+    </div>
+
+    <!-- Live map of real listings -->
+    <div class="relative">
+      <div class="card overflow-hidden p-2 shadow-2xl shadow-black/50">
+        <div class="flex items-center justify-between px-3 pb-2 pt-1">
+          <span class="text-sm font-semibold text-white"><i class="fa-solid fa-location-dot mr-1.5 text-brand-300"></i>Chennai · {{ map_spots|length }} listed spots</span>
+          <a href="{% url 'Parker_main' %}" class="text-xs font-semibold text-brand-300 hover:underline">Open full map →</a>
+        </div>
+        <div id="hero-map" class="h-[340px] rounded-xl sm:h-[400px]"></div>
+      </div>
+      {% with top=featured.0 %}{% if top %}
+      <a href="{% url 'spot_detail' top.id %}" class="card absolute -bottom-6 left-4 right-4 z-[500] hidden items-center gap-3 p-3 shadow-xl transition hover:border-ink-600 sm:flex lg:-left-6 lg:right-auto lg:w-80">
+        <img src="{{ top.photo.url }}" alt="" class="h-14 w-20 rounded-lg object-cover object-[center_90%]">
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-sm font-semibold text-white">{{ top.title }}</p>
+          <p class="text-xs text-slate-400"><i class="fa-solid fa-star text-amber-300"></i> {{ top.avg_rating|floatformat:1 }} · ₹{{ top.hourly_rate|floatformat:0 }}/hr{% if top.instant_book %} · Instant{% endif %}</p>
+        </div>
+      </a>
+      {% endif %}{% endwith %}
+    </div>
+  </div>
+</section>
+
+<!-- Project at a glance -->
+<section class="border-y border-ink-800 bg-ink-900/60">
+  <div class="mx-auto grid max-w-7xl grid-cols-2 gap-x-6 gap-y-8 px-4 py-8 sm:px-6 lg:grid-cols-4">
+    <div class="flex items-center gap-4">
+      <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-500/15 text-brand-300"><i class="fa-solid fa-location-dot"></i></span>
+      <div><p class="text-2xl font-extrabold text-white">{{ location_count }}</p><p class="text-sm text-slate-400">Chennai locations mapped</p></div>
+    </div>
+    <div class="flex items-center gap-4">
+      <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-sky-400/15 text-sky-300"><i class="fa-solid fa-users"></i></span>
+      <div><p class="text-2xl font-extrabold text-white">2 roles</p><p class="text-sm text-slate-400">drivers and hosts, one login</p></div>
+    </div>
+    <div class="flex items-center gap-4">
+      <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-amber-300"><i class="fa-solid fa-diagram-project"></i></span>
+      <div><p class="text-2xl font-extrabold text-white">5 models</p><p class="text-sm text-slate-400">spots, bookings, reviews, users</p></div>
+    </div>
+    <div class="flex items-center gap-4">
+      <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-400/15 text-emerald-300"><i class="fa-solid fa-vial-circle-check"></i></span>
+      <div><p class="text-2xl font-extrabold text-white">{{ test_count }} tests</p><p class="text-sm text-slate-400">automated test suite</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- Two sides -->
+<section class="mx-auto max-w-7xl px-4 py-16 sm:px-6">
+  <div class="max-w-2xl">
+    <p class="text-sm font-semibold uppercase tracking-wider text-brand-300">The product</p>
+    <h2 class="mt-2 text-3xl font-bold text-white">Two sides, one platform</h2>
+    <p class="mt-3 text-slate-400">Finding parking in a crowded city is slow and uncertain, while thousands of driveways sit empty all day. ParkMatch connects the two.</p>
+  </div>
+  <div class="mt-10 grid grid-cols-1 gap-6 md:grid-cols-2">
+    <div class="card flex flex-col p-8">
+      <span class="chip mb-4 w-fit"><i class="fa-solid fa-car-side text-sky-300"></i> For drivers</span>
+      <h3 class="text-2xl font-bold text-white">Parking sorted before you arrive</h3>
+      <ul class="mt-6 flex-1 space-y-4 text-slate-300">
+        <li class="flex gap-3"><i class="fa-solid fa-map-location-dot mt-1 text-brand-300"></i><span><b class="text-white">Map search</b> with price pins, clustering and "search this area". Sort by nearest, cheapest or top rated.</span></li>
+        <li class="flex gap-3"><i class="fa-solid fa-filter mt-1 text-brand-300"></i><span><b class="text-white">Filters</b> for car or bike, budget, covered, CCTV, EV charging, guard and instant book.</span></li>
+        <li class="flex gap-3"><i class="fa-solid fa-ticket mt-1 text-brand-300"></i><span><b class="text-white">Digital pass</b> with directions and the host's number, free cancellation, and reviews after each stay.</span></li>
+      </ul>
+      {% if pm_demo_mode %}<form method="post" action="{% url 'demo_login' 'parker' %}" class="mt-8">{% csrf_token %}<button class="btn-ghost"><i class="fa-solid fa-play"></i> Try the driver side</button></form>{% endif %}
+    </div>
+    <div class="card flex flex-col p-8">
+      <span class="chip mb-4 w-fit"><i class="fa-solid fa-house-chimney text-amber-300"></i> For hosts</span>
+      <h3 class="text-2xl font-bold text-white">An empty space that earns</h3>
+      <ul class="mt-6 flex-1 space-y-4 text-slate-300">
+        <li class="flex gap-3"><i class="fa-solid fa-location-dot mt-1 text-brand-300"></i><span><b class="text-white">Listing in two minutes</b>: drop a pin, set a price per hour, slots and amenities.</span></li>
+        <li class="flex gap-3"><i class="fa-solid fa-sliders mt-1 text-brand-300"></i><span><b class="text-white">Full control</b>: approve each request or switch on instant book, and pause a spot at any time.</span></li>
+        <li class="flex gap-3"><i class="fa-solid fa-chart-simple mt-1 text-brand-300"></i><span><b class="text-white">Earnings dashboard</b>: monthly revenue, a 14-day chart, guests parked now, and ratings.</span></li>
+      </ul>
+      {% if pm_demo_mode %}<form method="post" action="{% url 'demo_login' 'landlord' %}" class="mt-8">{% csrf_token %}<button class="btn-ghost"><i class="fa-solid fa-play"></i> Try the host side</button></form>{% endif %}
+    </div>
+  </div>
+</section>
+
+{% if featured %}
+<!-- Real listings -->
+<section class="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
+  <div class="mb-6 flex items-end justify-between gap-4">
+    <div><h2 class="text-2xl font-bold text-white">Popular in Chennai</h2><p class="mt-1 text-slate-400">Top-rated spots near T. Nagar, the Marina, OMR and more.</p></div>
+    <a href="{% url 'Parker_main' %}" class="hidden text-sm font-semibold text-brand-300 hover:underline sm:inline">See all on the map →</a>
+  </div>
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    {% for s in featured %}
+    <a href="{% url 'spot_detail' s.id %}" class="card group overflow-hidden transition hover:border-ink-600">
+      <div class="relative h-40 overflow-hidden">
+        <img src="{{ s.photo.url }}" alt="" loading="lazy" class="h-full w-full object-cover object-[center_90%] transition duration-500 group-hover:scale-105">
+        <span class="absolute right-2 top-2 rounded-full bg-ink-950/80 px-2.5 py-1 text-sm font-bold text-white">₹{{ s.hourly_rate|floatformat:0 }}<span class="text-xs font-normal text-slate-400">/hr</span></span>
+        {% if s.instant_book %}<span class="absolute left-2 top-2 rounded-md bg-ink-950/80 px-2 py-0.5 text-xs font-bold text-amber-300"><i class="fa-solid fa-bolt"></i> Instant</span>{% endif %}
+      </div>
+      <div class="p-4">
+        <p class="truncate font-semibold text-white group-hover:text-brand-300">{{ s.title }}</p>
+        <p class="mt-1 flex items-center justify-between gap-2 text-sm text-slate-400"><span class="truncate">{{ s.address }}</span>{% include "partials/stars.html" with avg=s.avg_rating count=None %}</p>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- How it works -->
+<section class="border-y border-ink-800 bg-ink-900/60">
+  <div class="mx-auto max-w-7xl px-4 py-16 sm:px-6">
+    <p class="text-sm font-semibold uppercase tracking-wider text-brand-300">How a booking works</p>
+    <div class="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-4">
+      <div><span class="grid h-11 w-11 place-items-center rounded-xl bg-brand-500/15 text-brand-300"><i class="fa-solid fa-magnifying-glass-location"></i></span><h3 class="mt-4 font-semibold text-white">1 · Search</h3><p class="mt-1 text-sm text-slate-400">The driver searches around them, with filters for price, vehicle and amenities.</p></div>
+      <div><span class="grid h-11 w-11 place-items-center rounded-xl bg-brand-500/15 text-brand-300"><i class="fa-solid fa-calendar-plus"></i></span><h3 class="mt-4 font-semibold text-white">2 · Request</h3><p class="mt-1 text-sm text-slate-400">They pick a time and see the price. The slot is checked against capacity and overlapping bookings.</p></div>
+      <div><span class="grid h-11 w-11 place-items-center rounded-xl bg-brand-500/15 text-brand-300"><i class="fa-solid fa-circle-check"></i></span><h3 class="mt-4 font-semibold text-white">3 · Confirm</h3><p class="mt-1 text-sm text-slate-400">The host accepts from their dashboard, or instant book confirms it automatically.</p></div>
+      <div><span class="grid h-11 w-11 place-items-center rounded-xl bg-brand-500/15 text-brand-300"><i class="fa-solid fa-star"></i></span><h3 class="mt-4 font-semibold text-white">4 · Park & review</h3><p class="mt-1 text-sm text-slate-400">The pass gives directions and the host's contact. After the stay, the driver rates the spot.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- Under the hood -->
+<section class="mx-auto max-w-7xl px-4 py-16 sm:px-6">
+  <div class="max-w-2xl">
+    <p class="text-sm font-semibold uppercase tracking-wider text-brand-300">Under the hood</p>
+    <h2 class="mt-2 text-3xl font-bold text-white">How it's built</h2>
+    <p class="mt-3 text-slate-400">A server-rendered Django app with no front-end framework. Pages are fast, work on any phone, and all the logic lives in the backend where it can be tested.</p>
+  </div>
+
+  <div class="mt-8 flex flex-wrap gap-2">
+    <span class="chip !px-3 !py-1.5 !text-sm"><i class="fa-brands fa-python text-sky-300"></i> Python 3</span>
+    <span class="chip !px-3 !py-1.5 !text-sm"><i class="fa-solid fa-layer-group text-brand-300"></i> Django 5.1</span>
+    <span class="chip !px-3 !py-1.5 !text-sm"><i class="fa-solid fa-database text-slate-300"></i> SQLite</span>
+    <span class="chip !px-3 !py-1.5 !text-sm"><i class="fa-solid fa-wind text-sky-300"></i> Tailwind CSS</span>
+    <span class="chip !px-3 !py-1.5 !text-sm"><i class="fa-solid fa-map text-brand-300"></i> Leaflet + OpenStreetMap</span>
+    <span class="chip !px-3 !py-1.5 !text-sm"><i class="fa-brands fa-js text-amber-300"></i> Vanilla JavaScript</span>
+    <span class="chip !px-3 !py-1.5 !text-sm"><i class="fa-solid fa-vial-circle-check text-brand-300"></i> Django test suite</span>
+  </div>
+
+  <div class="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px]">
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div class="card p-5"><i class="fa-solid fa-compass-drafting text-brand-300"></i><h3 class="mt-3 font-semibold text-white">Geo search</h3><p class="mt-1 text-sm text-slate-400">A bounding-box filter in the database narrows the candidates, then Haversine distance gives the exact radius. Three sort modes and amenity filters run on top.</p></div>
+      <div class="card p-5"><i class="fa-solid fa-calendar-xmark text-brand-300"></i><h3 class="mt-3 font-semibold text-white">No double-booking</h3><p class="mt-1 text-sm text-slate-400">Every request checks overlapping bookings against the spot's capacity. The check runs again, inside a transaction, when the host accepts.</p></div>
+      <div class="card p-5"><i class="fa-solid fa-shield-halved text-brand-300"></i><h3 class="mt-3 font-semibold text-white">Secure by default</h3><p class="mt-1 text-sm text-slate-400">PINs are hashed with PBKDF2, and a number locks after 5 wrong tries. Role-based guards, ownership checks, CSRF protection and safe redirects cover every action.</p></div>
+      <div class="card p-5"><i class="fa-solid fa-chart-column text-brand-300"></i><h3 class="mt-3 font-semibold text-white">Host analytics</h3><p class="mt-1 text-sm text-slate-400">Revenue, ratings and occupancy come from ORM aggregations. The 14-day chart is plain HTML and CSS, with a table view.</p></div>
+      <div class="card p-5"><i class="fa-solid fa-image text-brand-300"></i><h3 class="mt-3 font-semibold text-white">Generated cover art</h3><p class="mt-1 text-sm text-slate-400">A listing without a photo gets an SVG scene (garage, basement, beach, driveway or lot) that matches its description.</p></div>
+      <div class="card p-5"><i class="fa-solid fa-vial text-brand-300"></i><h3 class="mt-3 font-semibold text-white">Tested</h3><p class="mt-1 text-sm text-slate-400">{{ test_count }} automated tests cover sign-up, lockout, role guards, search filters, capacity, instant book, cancellations and reviews.</p></div>
+    </div>
+
+    <!-- Architecture -->
+    <div class="card p-6">
+      <h3 class="font-semibold text-white">Architecture</h3>
+      <div class="mt-5 space-y-2 text-sm">
+        <div class="rounded-xl border border-sky-400/30 bg-sky-400/10 p-3"><p class="font-semibold text-sky-200"><i class="fa-solid fa-display mr-1.5"></i>Browser</p><p class="text-xs text-slate-400">Django templates · Tailwind · Leaflet map</p></div>
+        <p class="text-center text-slate-600"><i class="fa-solid fa-arrow-down"></i></p>
+        <div class="rounded-xl border border-brand-500/30 bg-brand-500/10 p-3"><p class="font-semibold text-brand-200"><i class="fa-solid fa-server mr-1.5"></i>Django views</p><p class="text-xs text-slate-400"><span class="font-mono">Authentication</span> handles sign-up, login and role guards. <span class="font-mono">parker_main</span> handles search, booking, host tools and reviews.</p></div>
+        <p class="text-center text-slate-600"><i class="fa-solid fa-arrow-down"></i></p>
+        <div class="rounded-xl border border-ink-600 bg-ink-850 p-3"><p class="font-semibold text-slate-200"><i class="fa-solid fa-database mr-1.5"></i>ORM → SQLite</p><p class="text-xs text-slate-400">Parker · Landlord · ParkingSpot · Booking · Review</p></div>
+        <div class="mt-4 rounded-xl border border-dashed border-ink-700 p-3 text-xs text-slate-400"><i class="fa-solid fa-globe mr-1.5"></i>Map tiles come from OpenStreetMap, and directions open in Google Maps.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Closing CTA -->
+<section class="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
+  <div class="card relative overflow-hidden p-10 text-center">
+    <div class="pointer-events-none absolute inset-0 opacity-30" style="background: radial-gradient(circle at 50% 0%, rgba(20,184,138,.4), transparent 60%);"></div>
+    <div class="relative">
+      <h2 class="text-3xl font-bold text-white">See it for yourself</h2>
+      <p class="mx-auto mt-2 max-w-lg text-slate-400">Book a spot as a driver, then switch to the host view and accept it. The banner at the top lets you switch sides any time.</p>
+      <div class="mt-6 flex flex-wrap justify-center gap-3">
+        {% if pm_demo_mode %}
+        <form method="post" action="{% url 'demo_login' 'parker' %}">{% csrf_token %}<button class="btn-primary px-6 py-3 text-base"><i class="fa-solid fa-car-side"></i> Try as a driver</button></form>
+        <form method="post" action="{% url 'demo_login' 'landlord' %}">{% csrf_token %}<button class="btn-ghost px-6 py-3 text-base"><i class="fa-solid fa-house-chimney"></i> Try as a host</button></form>
+        {% else %}
+        <a href="{% url 'Parker_main' %}" class="btn-primary px-6 py-3 text-base">Explore the map</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="border-t border-ink-800 px-4 py-8 text-center text-sm text-slate-500">
+  <p>
+    ParkMatch{% if project_author %} · Built by <span class="text-slate-300">{{ project_author }}</span>{% endif %}
+    {% if project_repo_url %} · <a href="{{ project_repo_url }}" target="_blank" rel="noopener" class="text-brand-300 hover:underline"><i class="fa-brands fa-github"></i> Source code</a>{% endif %}
+  </p>
+  <p class="mt-1">A portfolio project. All listings, bookings and reviews are sample data, and no payments are taken. Map data © OpenStreetMap contributors.</p>
+</footer>
+{{ map_spots|json_script:"hero-spots" }}
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  (() => {
+    const spots = JSON.parse(document.getElementById('hero-spots').textContent);
+    const map = L.map('hero-map', { scrollWheelZoom: false, zoomControl: false }).setView([13.03, 80.22], 11);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: 'pm-tiles', referrerPolicy: 'strict-origin-when-cross-origin', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(map);
+    const bounds = [];
+    spots.forEach(s => {
+      bounds.push([s.lat, s.lng]);
+      L.marker([s.lat, s.lng], { icon: L.divIcon({ className: '', html: `<span class="hero-pin">₹${s.price}</span>`, iconSize: [0, 0] }) })
+        .on('click', () => { window.location = s.url; }).addTo(map);
+    });
+    pmWatchMap(map, () => bounds.length && map.fitBounds(bounds, { padding: [24, 24], animate: false }));
+  })();
+</script>
+{% endblock %}

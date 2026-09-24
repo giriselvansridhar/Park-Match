@@ -1,0 +1,1 @@
+{% if avg %}<span class="inline-flex items-center gap-1 text-sm"><i class="fa-solid fa-star text-amber-300"></i><span class="font-semibold text-slate-100">{{ avg|floatformat:1 }}</span>{% if count %}<span class="text-slate-500">({{ count }})</span>{% endif %}</span>{% else %}<span class="text-xs font-medium text-brand-300">New</span>{% endif %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Sign up to park{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-lg px-4 py-12">
+  <div class="card p-8 shadow-2xl shadow-black/40">
+    <span class="chip mb-4"><i class="fa-solid fa-car-side text-sky-300"></i> Parker account</span>
+    <h1 class="text-2xl font-bold text-white">Find parking in seconds</h1>
+    <p class="mt-1 text-sm text-slate-400">One minute to sign up. You'll log in with your phone and a 4-digit PIN.</p>
+
+    <form method="post" class="mt-6 space-y-4" novalidate>
+      {% csrf_token %}
+      {% include "partials/form_errors.html" %}
+      {% include "partials/field.html" with field=form.name %}
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {% include "partials/field.html" with field=form.phone %}
+        {% include "partials/field.html" with field=form.email %}
+      </div>
+
+      <div>
+        <span class="pm-label">Vehicle</span>
+        <div class="grid grid-cols-2 gap-3">
+          {% for radio in form.vehicle_type %}
+          <label class="cursor-pointer">
+            {{ radio.tag }}
+            <span class="flex items-center justify-center gap-2 rounded-xl border border-ink-700 bg-ink-900 py-3 font-semibold text-slate-400 transition hover:border-ink-600">
+              <i class="fa-solid {% if radio.data.value == 'car' %}fa-car{% else %}fa-motorcycle{% endif %}"></i> {{ radio.choice_label }}
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% include "partials/field.html" with field=form.vehicle_number %}
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {% include "partials/field.html" with field=form.pin %}
+        {% include "partials/field.html" with field=form.confirm_pin %}
+      </div>
+      <button class="btn-primary w-full py-3"><i class="fa-solid fa-user-plus"></i> Create account</button>
+    </form>
+
+    <p class="mt-6 border-t border-ink-800 pt-5 text-center text-sm text-slate-400">
+      Already a member? <a href="{% url 'login' %}?role=parker" class="font-semibold text-brand-300 hover:underline">Log in</a>
+      · Own a space? <a href="{% url 'LandLord_Register' %}" class="font-semibold text-brand-300 hover:underline">Become a host</a>
+    </p>
+  </div>
+</div>
+<style>
+  input[name="vehicle_type"] { position: absolute; opacity: 0; pointer-events: none; }
+  input[name="vehicle_type"]:checked + span { border-color: #34d3a6; color: #fff; background: rgba(20,184,138,.12); }
+  input[name="vehicle_type"]:focus-visible + span { outline: 2px solid #34d3a6; outline-offset: 2px; }
+</style>
+{% endblock %}

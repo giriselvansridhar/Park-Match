@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Become a host{% endblock %}
+{% block content %}
+<div class="mx-auto grid max-w-5xl grid-cols-1 items-center gap-10 px-4 py-12 lg:grid-cols-2">
+  <div class="hidden lg:block">
+    <span class="chip mb-4"><i class="fa-solid fa-house-chimney text-amber-300"></i> Host with ParkMatch</span>
+    <h1 class="text-4xl font-extrabold leading-tight text-white">Your driveway could be earning right now.</h1>
+    <ol class="mt-8 space-y-6">
+      <li class="flex gap-4"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-500/15 font-bold text-brand-300">1</span><div><p class="font-semibold text-white">Create your host account</p><p class="text-sm text-slate-400">Takes less than a minute.</p></div></li>
+      <li class="flex gap-4"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-500/15 font-bold text-brand-300">2</span><div><p class="font-semibold text-white">Drop a pin and set your price</p><p class="text-sm text-slate-400">Add slots, amenities and a photo.</p></div></li>
+      <li class="flex gap-4"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-500/15 font-bold text-brand-300">3</span><div><p class="font-semibold text-white">Accept bookings, track earnings</p><p class="text-sm text-slate-400">Approve each request, or let instant book handle it.</p></div></li>
+    </ol>
+  </div>
+
+  <div class="card p-8 shadow-2xl shadow-black/40">
+    <h2 class="text-2xl font-bold text-white">Create a host account</h2>
+    <p class="mt-1 text-sm text-slate-400">You'll add your first parking spot right after this.</p>
+    <form method="post" enctype="multipart/form-data" class="mt-6 space-y-4" novalidate>
+      {% csrf_token %}
+      {% include "partials/form_errors.html" %}
+      {% include "partials/field.html" with field=form.name %}
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {% include "partials/field.html" with field=form.phone %}
+        {% include "partials/field.html" with field=form.city %}
+      </div>
+      {% include "partials/field.html" with field=form.email %}
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {% include "partials/field.html" with field=form.pin %}
+        {% include "partials/field.html" with field=form.confirm_pin %}
+      </div>
+      {% include "partials/field.html" with field=form.profile_image %}
+      <button class="btn-primary w-full py-3"><i class="fa-solid fa-rocket"></i> Start hosting</button>
+    </form>
+    <p class="mt-6 border-t border-ink-800 pt-5 text-center text-sm text-slate-400">
+      Already hosting? <a href="{% url 'login' %}?role=landlord" class="font-semibold text-brand-300 hover:underline">Log in</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

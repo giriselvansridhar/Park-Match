@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}{{ spot.title }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>.leaflet-container{background:#0c121c}.leaflet-control-attribution{background:rgba(7,11,18,.7)!important;color:#64748b!important}.leaflet-control-attribution a{color:#94a3b8!important}</style>
+{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+  <a href="{% url 'Parker_main' %}" class="mb-4 inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"><i class="fa-solid fa-arrow-left"></i> Back to map</a>
+
+  <div class="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_380px]">
+    <div class="min-w-0 space-y-6">
+      <div class="relative h-64 overflow-hidden rounded-2xl bg-ink-850 sm:h-80">
+        {% if spot.photo %}<img src="{{ spot.photo.url }}" alt="{{ spot.title }}" class="h-full w-full object-cover object-[center_92%]">
+        {% else %}<div class="grid h-full w-full place-items-center bg-gradient-to-br from-ink-700 via-ink-850 to-ink-900"><i class="fa-solid {% if spot.is_covered %}fa-warehouse{% else %}fa-square-parking{% endif %} text-6xl text-ink-600"></i></div>{% endif %}
+        {% if not spot.is_active %}<div class="absolute inset-0 grid place-items-center bg-ink-950/70 text-lg font-semibold text-white">Currently paused by host</div>{% endif %}
+      </div>
+
+      <div>
+        <div class="flex flex-wrap items-center gap-3">
+          {% include "partials/stars.html" with avg=rating.avg count=rating.count %}
+          {% if spot.instant_book %}<span class="chip border-amber-400/30 text-amber-300"><i class="fa-solid fa-bolt"></i> Instant book</span>{% endif %}
+          <span class="chip {% if free_now %}text-brand-300{% else %}text-rose-300{% endif %}"><i class="fa-solid fa-circle text-[7px]"></i> {{ free_now }} of {{ spot.capacity }} slot{{ spot.capacity|pluralize }} free now</span>
+        </div>
+        <h1 class="mt-3 text-3xl font-extrabold tracking-tight text-white">{{ spot.title }}</h1>
+        <p class="mt-2 text-slate-400"><i class="fa-solid fa-location-dot mr-1.5"></i>{{ spot.address }}{% if spot.city %}, {{ spot.city }}{% endif %}</p>
+      </div>
+
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div class="card flex items-center gap-3 p-4">
+          <span class="grid h-10 w-10 place-items-center rounded-full bg-ink-800 font-bold text-white">{{ spot.landlord.name|first|upper }}</span>
+          <div><p class="text-sm text-slate-400">Hosted by</p><p class="font-semibold text-white">{{ spot.landlord.name }}</p></div>
+        </div>
+        <div class="card flex items-center gap-3 p-4">
+          <span class="grid h-10 w-10 place-items-center rounded-full bg-ink-800 text-slate-300"><i class="fa-solid {% if spot.accepts_car and spot.accepts_bike %}fa-car-side{% elif spot.accepts_car %}fa-car{% else %}fa-motorcycle{% endif %}"></i></span>
+          <div><p class="text-sm text-slate-400">Fits</p><p class="font-semibold text-white">{% if spot.accepts_car %}Cars{% endif %}{% if spot.accepts_car and spot.accepts_bike %} & {% endif %}{% if spot.accepts_bike %}Bikes{% endif %}</p></div>
+        </div>
+      </div>
+
+      {% if spot.amenities %}
+      <div>
+        <h2 class="mb-3 font-semibold text-white">Amenities</h2>
+        <div class="flex flex-wrap gap-2">{% for label, icon in spot.amenities %}<span class="chip !px-3 !py-1.5 !text-sm"><i class="fa-solid {{ icon }} text-brand-300"></i>{{ label }}</span>{% endfor %}</div>
+      </div>
+      {% endif %}
+
+      {% if spot.description %}
+      <div><h2 class="mb-2 font-semibold text-white">About this spot</h2><p class="whitespace-pre-line text-slate-300">{{ spot.description }}</p></div>
+      {% endif %}
+
+      <div>
+        <div class="mb-3 flex items-center justify-between"><h2 class="font-semibold text-white">Location</h2><a href="{% url 'spot_directions' spot.id %}" class="text-sm font-semibold text-brand-300 hover:underline"><i class="fa-solid fa-diamond-turn-right mr-1"></i>Get directions</a></div>
+        <div id="mini-map" class="h-56 overflow-hidden rounded-2xl border border-ink-800"></div>
+      </div>
+
+      <div>
+        <h2 class="mb-3 font-semibold text-white">Reviews {% if rating.count %}<span class="text-slate-500">· {{ rating.count }}</span>{% endif %}</h2>
+        <div class="space-y-3">
+          {% for r in reviews %}
+          <div class="card p-4">
+            <div class="flex items-center justify-between">
+              <p class="font-semibold text-white">{{ r.booking.parker.name }}</p>
+              <p class="text-sm text-amber-300">{% for i in "12345" %}<i class="fa-{% if forloop.counter <= r.rating %}solid{% else %}regular{% endif %} fa-star"></i>{% endfor %}</p>
+            </div>
+            {% if r.comment %}<p class="mt-2 text-slate-300">{{ r.comment }}</p>{% endif %}
+            <p class="mt-2 text-xs text-slate-500">{{ r.created_at|date:"M Y" }}</p>
+          </div>
+          {% empty %}
+          <p class="text-sm text-slate-500">No reviews yet — be the first to park here.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Booking card -->
+    <aside class="lg:sticky lg:top-24 lg:self-start">
+      <div class="card p-6 shadow-2xl shadow-black/40">
+        <div class="flex items-center justify-between gap-3">
+          <p><span class="text-3xl font-extrabold text-white">₹{{ spot.hourly_rate|floatformat:0 }}</span><span class="text-slate-400"> / hour</span></p>
+          <a href="{% url 'spot_directions' spot.id %}" class="btn-ghost !px-3 !py-2 text-xs"><i class="fa-solid fa-diamond-turn-right text-brand-300"></i> Directions</a>
+        </div>
+        {% if not form %}
+        <div class="mt-5 space-y-3">
+          <p class="text-sm text-slate-400">Pick a time, see the total and book in a couple of taps.</p>
+          {% if pm_demo_mode %}
+          <form method="post" action="{% url 'demo_login' 'parker' %}">{% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.path }}">
+            <button class="btn-primary w-full py-3 text-base"><i class="fa-solid fa-play"></i> Try booking with the demo account</button>
+          </form>
+          {% endif %}
+          <a href="{% url 'login' %}?role=parker&next={{ request.path|urlencode }}" class="btn-ghost w-full">Log in to book</a>
+          <p class="text-center text-xs text-slate-500">The demo needs no sign-up. It's sample data, so no real booking is made.</p>
+        </div>
+        {% elif not accepts_my_vehicle %}
+        <p class="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-200"><i class="fa-solid fa-triangle-exclamation mr-1"></i>This spot doesn't take {{ pm_user.get_vehicle_type_display|lower }}s.</p>
+        {% elif not spot.is_active %}
+        <p class="mt-4 rounded-xl border border-ink-700 bg-ink-850 p-3 text-sm text-slate-300">The host has paused bookings for now.</p>
+        {% else %}
+        <form method="post" class="mt-5 space-y-4" id="book-form">
+          {% csrf_token %}
+          {% include "partials/form_errors.html" %}
+          {% include "partials/field.html" with field=form.start %}
+          {% include "partials/field.html" with field=form.hours %}
+          <div class="rounded-xl bg-ink-850 p-4 text-sm">
+            <div class="flex justify-between text-slate-400"><span>₹{{ spot.hourly_rate|floatformat:0 }} × <span id="h-count">2</span> hr</span><span id="subtotal"></span></div>
+            <div class="mt-2 flex justify-between text-slate-400"><span>Vehicle</span><span class="font-mono text-slate-200">{{ pm_user.vehicle_number }}</span></div>
+            <div class="mt-3 flex justify-between border-t border-ink-700 pt-3 text-base font-bold text-white"><span>Total</span><span id="total"></span></div>
+            <p class="mt-2 text-xs text-slate-500" id="leave-at"></p>
+          </div>
+          <button class="btn-primary w-full py-3 text-base">
+            {% if spot.instant_book %}<i class="fa-solid fa-bolt"></i> Book instantly{% else %}<i class="fa-solid fa-paper-plane"></i> Request to book{% endif %}
+          </button>
+          <p class="text-center text-xs text-slate-500">{% if spot.instant_book %}Confirmed right away.{% else %}The host reviews each request, and you'll see the status in My bookings.{% endif %} Free cancellation before your start time.</p>
+        </form>
+        {% endif %}
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  const pos = [{{ spot.latitude|stringformat:"f" }}, {{ spot.longitude|stringformat:"f" }}];
+  const mini = L.map('mini-map', { scrollWheelZoom: false }).setView(pos, 16);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, className: 'pm-tiles', referrerPolicy: 'strict-origin-when-cross-origin', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(mini);
+  L.circleMarker(pos, { radius: 10, color: '#fff', weight: 3, fillColor: '#34d3a6', fillOpacity: 1 }).addTo(mini);
+  pmWatchMap(mini, () => mini.setView(pos, 16, { animate: false }));
+
+  const form = document.getElementById('book-form');
+  if (form) {
+    const rate = {{ spot.hourly_rate|stringformat:"f" }};
+    const fmt = n => '₹' + Math.round(n).toLocaleString('en-IN');
+    const update = () => {
+      const h = parseInt(form.hours.value, 10) || 0;
+      document.getElementById('h-count').textContent = h;
+      document.getElementById('subtotal').textContent = fmt(rate * h);
+      document.getElementById('total').textContent = fmt(rate * h);
+      const start = new Date(form.start.value);
+      document.getElementById('leave-at').textContent = isNaN(start) ? '' :
+        'Leave by ' + new Date(start.getTime() + h * 3600e3).toLocaleString('en-IN', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+    };
+    form.addEventListener('input', update);
+    form.addEventListener('change', update);
+    update();
+  }
+</script>
+{% endblock %}
