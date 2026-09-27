@@ -1,10 +1,12 @@
 # ParkMatch
 
+[![tests](https://github.com/giriselvansridhar/Park-Match/actions/workflows/tests.yml/badge.svg)](https://github.com/giriselvansridhar/Park-Match/actions/workflows/tests.yml)
+
 A parking marketplace for Chennai. Drivers find a private driveway, garage or lot on a map, book it by the hour and get directions to it. Hosts list their empty spaces, approve requests and see what they've earned.
 
 Built with Django, with server-rendered pages and no front-end framework.
 
-**Live demo:** https://YOUR-APP.vercel.app · no sign-up; use the "Try as a driver" or "Try as a host" buttons
+**Live demo:** https://park-match.vercel.app · no sign-up; use the "Try as a driver" or "Try as a host" buttons
 
 ![Driver flow: demo login, map search, booking a spot, then in-app directions](docs/demo/driver-flow.gif)
 
@@ -133,7 +135,7 @@ erDiagram
 | Front end | Django templates, Tailwind CSS, vanilla JavaScript |
 | Maps | Leaflet, OpenStreetMap tiles, Leaflet.markercluster, OSRM routing |
 | Hosting | Vercel (Python runtime) with WhiteNoise for static files |
-| Tests | Django test runner, 39 tests |
+| Tests | pytest + pytest-django, 145 tests, 96% coverage, run on every push by GitHub Actions |
 
 ## Running it locally
 
@@ -150,11 +152,40 @@ python manage.py runserver
 Open http://localhost:8000 and click **Try as a driver**. To log in manually, use phone `9000000001` (driver) or `9000000002` (host), with PIN `1234`.
 
 ```bash
-python manage.py test              # 39 tests
 python manage.py seed_demo --reset # put the demo data back after clicking around
 ```
 
-The test suite covers sign-up and PIN hashing, lockout, role guards, search filters, capacity and overlap checks, instant book, accept and decline, cancellation, reviews, the demo logins and the directions page.
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest                   # 145 tests, about 3 seconds
+python -m pytest --cov             # with a coverage report (96%)
+```
+
+| File | What it checks |
+|---|---|
+| `tests/test_booking_rules.py` | Overlap edge cases (back-to-back, inside, covering), capacity, which statuses hold a slot, pricing, instant book, form rejections, the booking lifecycle |
+| `tests/test_flows.py` | Public vs. private pages, driver/host separation, changing IDs in URLs (must 404), request → accept → slot taken, search filters and sorting, PIN lockout, safe redirects |
+| `tests/test_units.py` | Phone normalisation, Haversine distances, PIN hashing, CSV coordinate parsing, cover-art selection |
+| `tests/test_commands.py` | The seed/import commands that build the demo data, including re-running them safely |
+| `*/tests.py` | The original Django `TestCase` suite, which also runs under pytest |
+
+Shared fixtures (users, spots, bookings, logged-in clients) live in `conftest.py`. Most rules are tested with `pytest.mark.parametrize` tables, so each edge case reads like a row in a spec:
+
+```python
+# Existing booking 10:00-12:00 in a one-slot spot. Does a new request fit?
+@pytest.mark.parametrize("start_h, hours, fits", [
+    (8, 2, True),     # 08-10 ends exactly when it starts
+    (12, 2, True),    # 12-14 starts exactly when it ends
+    (9, 2, False),    # 09-11 overlaps the start
+    (9, 4, False),    # 09-13 covers it entirely
+])
+```
+
+Writing the command tests turned up a real bug. `landlords.csv` has an unrelated 11,000-row dataset appended after a second header row, and the importer crashed on that header. It now stops there and skips rows with invalid coordinates.
+
+`deploy/build.py` runs the suite before finishing the Vercel bundle, so a failing build is never deployed.
 
 ## Deploying
 
@@ -175,6 +206,7 @@ parker_main/           spots, bookings, reviews; search, booking, host tools, di
   management/commands/ seed_chennai, seed_demo, generate_spot_images
 templates/             all pages (parker/, landlord/, auth/, partials/)
 deploy/build.py        builds the Vercel bundle
+tests/                 pytest suite (plus conftest.py fixtures at the root)
 docs/                  screenshots and demo videos for this README
 ```
 

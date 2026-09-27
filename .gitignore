@@ -1,0 +1,23 @@
+# Local data: your own database and uploads. The deployed demo uses deploy/demo.sqlite3 and deploy/media instead.
+/db.sqlite3
+/db.sqlite3-journal
+/media/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Tooling
+.claude/
+.vercel/
+
+.vercel
+.env*
+
+# Test artefacts
+.pytest_cache/
+.coverage
+htmlcov/

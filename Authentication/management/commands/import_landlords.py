@@ -1,6 +1,6 @@
 import csv
 import os
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
@@ -19,9 +19,16 @@ class Command(BaseCommand):
         filepath = os.path.join(settings.BASE_DIR, 'Authentication', 'data', 'landlords.csv')
         existing = set(Landlord.objects.values_list('phone', flat=True)) | set(Landlord.objects.values_list('email', flat=True))
 
-        created = 0
+        created = skipped = 0
         with open(filepath, newline='', encoding='utf-8') as csvfile, transaction.atomic():
             for row in csv.DictReader(csvfile):
+                if row['name'].strip().lower() == 'name':
+                    # The file has an unrelated dataset appended after a second header row; stop there.
+                    break
+                lat, lng = _coordinate(row['latitude'], 90), _coordinate(row['longitude'], 180)
+                if row['latitude'] and lat is None or row['longitude'] and lng is None:
+                    skipped += 1
+                    continue
                 phone = normalize_phone(row['phone'])
                 if phone in existing or row['email'] in existing:
                     continue
@@ -38,8 +45,8 @@ class Command(BaseCommand):
                     state=row['state'],
                     country=row['country'],
                     pin=make_password(row['pin']),
-                    latitude=row['latitude'] or None,
-                    longitude=row['longitude'] or None,
+                    latitude=lat,
+                    longitude=lng,
                 )
                 if landlord.latitude is not None and landlord.longitude is not None:
                     seed = landlord.id * 7919
@@ -59,4 +66,14 @@ class Command(BaseCommand):
                     ensure_photo(spot)
                 created += 1
 
-        self.stdout.write(self.style.SUCCESS(f'Imported {created} new landlords (existing phones/emails skipped).'))
+        note = f', skipped {skipped} rows with invalid coordinates' if skipped else ''
+        self.stdout.write(self.style.SUCCESS(f'Imported {created} new landlords (existing phones/emails skipped{note}).'))
+
+
+def _coordinate(value, limit):
+    """A latitude/longitude as Decimal, or None if it's blank, not a number or out of range."""
+    try:
+        number = Decimal(value)
+    except (InvalidOperation, TypeError):
+        return None
+    return number if abs(number) <= limit else None

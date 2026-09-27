@@ -23,9 +23,16 @@ HOME_FOR_ROLE = {"parker": "Parker_main", "landlord": "landlord_dashboard"}
 
 @lru_cache(maxsize=1)
 def _test_count():
-    """Number of automated tests in the project, counted from the test files (shown on the landing page)."""
+    """Number of automated tests (shown on the landing page).
+
+    deploy/build.py records pytest's collected count; without it, count the test functions in the source.
+    """
     root = Path(settings.BASE_DIR)
-    return sum(len(re.findall(r"^\s+def test_", f.read_text(encoding="utf-8"), re.M)) for f in root.glob("*/tests.py"))
+    recorded = root / "deploy" / "test_count.txt"
+    if recorded.exists():
+        return int(recorded.read_text().strip())
+    files = [*root.glob("*/tests.py"), *root.glob("tests/test_*.py")]
+    return sum(len(re.findall(r"^\s*def test_", f.read_text(encoding="utf-8"), re.M)) for f in files)
 
 
 def home(request):

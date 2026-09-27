@@ -1,0 +1,11 @@
+[run]
+source = Authentication, parker_main, Parking_tracker
+omit =
+    */migrations/*
+    */tests.py
+    Parking_tracker/asgi.py
+    Parking_tracker/wsgi.py
+
+[report]
+show_missing = False
+skip_covered = False

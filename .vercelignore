@@ -1,11 +1,20 @@
-# Local-only data: the deploy uses deploy/demo.sqlite3 and deploy/media instead.
-db.sqlite3
-media/
+# Local-only data. The deploy uses deploy/demo.sqlite3 and deploy/media instead.
+# (Leading "/" = only the folder at the project root, so deploy/media is still uploaded.)
+/db.sqlite3
+/media/
 **/__pycache__/
 *.pyc
-.claude/
-.venv/
-venv/
+/.claude/
+/.venv/
+/venv/
 
 # README screenshots and videos aren't needed by the app.
-docs/
+/docs/
+
+# Tests and CI config aren't needed at runtime.
+/tests/
+/conftest.py
+/pytest.ini
+/.coveragerc
+/.github/
+/requirements-dev.txt
